@@ -207,21 +207,21 @@ export default function ResultsClient() {
         )}
 
         {/* Tab navigation */}
-        <nav aria-label="Rapport-sektioner" className="flex gap-2 mb-8 overflow-x-auto pb-2">
+        <nav aria-label="Rapport-sektioner" className="flex gap-1.5 mb-8 overflow-x-auto pb-2 p-1.5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
           {([
             { key: "overview" as const, icon: TrendingUp, label: "Overblik" },
-            { key: "actions" as const, icon: Zap, label: "Quick Wins" },
+            { key: "actions" as const, icon: Zap, label: "Prioriterede handlinger" },
             { key: "ab-tests" as const, icon: FlaskConical, label: "A/B Test-idéer" },
-            { key: "benchmark" as const, icon: BarChart3, label: "Benchmark" },
+            { key: "benchmark" as const, icon: BarChart3, label: "Competitor Benchmark" },
           ]).map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               aria-pressed={activeTab === tab.key}
-              className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+              className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
                 activeTab === tab.key
-                  ? "bg-orange-500/15 text-orange-400 border border-orange-500/30"
-                  : "text-neutral-400 hover:text-white hover:bg-white/5"
+                  ? "bg-orange-500/15 text-orange-400 border border-orange-500/30 shadow-sm shadow-orange-500/10"
+                  : "text-neutral-300 hover:text-white hover:bg-white/[0.06] border border-transparent"
               }`}
             >
               <tab.icon className="w-4 h-4" aria-hidden="true" />
@@ -372,17 +372,17 @@ export default function ResultsClient() {
           );
         })()}
 
-        {/* Quick Wins */}
+        {/* Prioriterede handlinger */}
         {activeTab === "actions" && (
           <div className="space-y-6">
             <section className="glass-card rounded-2xl p-8" aria-labelledby="quickwins-heading">
               <h2 id="quickwins-heading" className="text-xl font-bold mb-2 flex items-center gap-3">
                 <Zap className="w-5 h-5 text-orange-400" aria-hidden="true" />
-                Quick Wins
+                Prioriterede handlinger
               </h2>
               <p className="text-neutral-400 text-sm mb-6">
-                Disse ændringer kan implementeres hurtigt og har dokumenteret
-                effekt på konverteringsraten.
+                De vigtigste ændringer der kan implementeres hurtigt og har
+                dokumenteret effekt på konverteringsraten.
               </p>
               <div className="grid sm:grid-cols-2 gap-4">
                 {analysis.quickWins.map((win, i) => (
