@@ -15,6 +15,10 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  ChevronDown,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import ScoreRing from "@/components/ScoreRing";
@@ -45,6 +49,7 @@ export default function ResultsClient() {
   const [activeTab, setActiveTab] = useState<
     "overview" | "details" | "actions" | "ab-tests" | "benchmark"
   >("overview");
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("cro-analysis");
@@ -112,53 +117,53 @@ export default function ResultsClient() {
         </div>
 
         {/* Score hero */}
-        <section className="glass-card rounded-3xl p-8 sm:p-10 mb-8" aria-labelledby="score-heading">
-          <div className="flex flex-col lg:flex-row items-center gap-10">
+        <section className="glass-card rounded-2xl p-5 sm:p-6 mb-6" aria-labelledby="score-heading">
+          <div className="flex flex-col lg:flex-row items-center gap-6">
             <div className="flex flex-col items-center">
               <ScoreRing
                 score={analysis.overallScore}
-                size={180}
-                strokeWidth={12}
+                size={110}
+                strokeWidth={8}
               />
-              <p className="mt-3 text-lg font-bold">
+              <p className="mt-2 text-sm font-bold">
                 {getScoreLabel(analysis.overallScore)}
               </p>
-              <p className="text-sm text-neutral-400 mt-1">
+              <p className="text-[11px] text-neutral-400 mt-0.5">
                 Sidetype: {analysis.pageType}
               </p>
             </div>
 
             <div className="flex-1 text-center lg:text-left">
-              <h1 id="score-heading" className="text-2xl sm:text-3xl font-bold mb-4">
+              <h1 id="score-heading" className="text-lg sm:text-xl font-bold mb-2">
                 CRO-analyserapport
               </h1>
-              <p className="text-neutral-300 leading-relaxed mb-6">
+              <p className="text-neutral-300 text-sm leading-relaxed mb-4">
                 {analysis.summary}
               </p>
 
-              <div className="flex flex-wrap justify-center lg:justify-start gap-4" role="list" aria-label="Analyse-statistik">
-                <div role="listitem" className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5">
-                  <span className="text-lg font-bold">{totalFindings}</span>
-                  <span className="text-sm text-neutral-400">fund totalt</span>
+              <div className="flex flex-wrap justify-center lg:justify-start gap-2" role="list" aria-label="Analyse-statistik">
+                <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5">
+                  <span className="text-sm font-bold">{totalFindings}</span>
+                  <span className="text-[11px] text-neutral-400">fund</span>
                 </div>
-                <div role="listitem" className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10">
-                  <span className="text-lg font-bold text-red-400">{errorCount}</span>
-                  <span className="text-sm text-neutral-400">kritiske</span>
+                <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10">
+                  <span className="text-sm font-bold text-red-400">{errorCount}</span>
+                  <span className="text-[11px] text-neutral-400">kritiske</span>
                 </div>
-                <div role="listitem" className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500/10">
-                  <span className="text-lg font-bold text-yellow-400">{warningCount}</span>
-                  <span className="text-sm text-neutral-400">advarsler</span>
+                <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10">
+                  <span className="text-sm font-bold text-yellow-400">{warningCount}</span>
+                  <span className="text-[11px] text-neutral-400">advarsler</span>
                 </div>
-                <div role="listitem" className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/10">
-                  <span className="text-lg font-bold text-green-400">{successCount}</span>
-                  <span className="text-sm text-neutral-400">bestået</span>
+                <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10">
+                  <span className="text-sm font-bold text-green-400">{successCount}</span>
+                  <span className="text-[11px] text-neutral-400">bestået</span>
                 </div>
               </div>
             </div>
 
             {screenshot && (
               <div className="shrink-0 hidden xl:block">
-                <div className="w-64 rounded-xl overflow-hidden border border-white/10 shadow-2xl">
+                <div className="w-48 rounded-lg overflow-hidden border border-white/10 shadow-2xl">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={screenshot}
@@ -199,45 +204,120 @@ export default function ResultsClient() {
 
         {/* Overview */}
         {activeTab === "overview" && (
-          <div className="space-y-8">
-            <section aria-label="Kategori-scores">
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {analysis.categories.map((cat) => (
-                  <article
-                    key={cat.name}
-                    className="glass-card rounded-xl p-5 flex items-center gap-4 cursor-pointer hover:border-orange-500/20 transition-all"
-                    onClick={() => setActiveTab("details")}
-                  >
-                    <ScoreRing score={cat.score} size={56} strokeWidth={4} />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span aria-hidden="true">{cat.icon}</span>
-                        <h3 className="font-semibold text-sm">{cat.name}</h3>
+          <div className="space-y-6">
+            {/* Top critical errors summary */}
+            {errorCount > 0 && (
+              <section className="glass-card rounded-xl p-5" aria-labelledby="critical-summary">
+                <div className="flex items-center gap-2 mb-3">
+                  <XCircle className="w-4 h-4 text-red-400" aria-hidden="true" />
+                  <h2 id="critical-summary" className="text-sm font-bold text-red-400">
+                    {errorCount} kritisk{errorCount !== 1 ? "e" : ""} problem{errorCount !== 1 ? "er" : ""} fundet
+                  </h2>
+                </div>
+                <div className="space-y-2">
+                  {analysis.categories
+                    .flatMap((c) => c.findings)
+                    .filter((fi) => fi.type === "error")
+                    .slice(0, 5)
+                    .map((fi, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs">
+                        <span className="text-red-400 mt-0.5 shrink-0">●</span>
+                        <span className="text-neutral-300">{fi.title} – <span className="text-neutral-500">{fi.description.slice(0, 80)}{fi.description.length > 80 ? "…" : ""}</span></span>
                       </div>
-                      <p className="text-xs text-neutral-500 mt-1">
-                        {cat.findings.length} fund
-                      </p>
+                    ))}
+                </div>
+              </section>
+            )}
+
+            {/* Category menu */}
+            <section aria-label="Kategori-scores">
+              <div className="space-y-2">
+                {analysis.categories.map((cat) => {
+                  const isExpanded = expandedCategory === cat.name;
+                  const errors = cat.findings.filter((fi) => fi.type === "error");
+                  const warnings = cat.findings.filter((fi) => fi.type === "warning");
+                  const successes = cat.findings.filter((fi) => fi.type === "success");
+
+                  return (
+                    <div key={cat.name} className="glass-card rounded-xl overflow-hidden">
+                      <button
+                        onClick={() => setExpandedCategory(isExpanded ? null : cat.name)}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
+                      >
+                        <ScoreRing score={cat.score} size={36} strokeWidth={3} />
+                        <span className="text-xs" aria-hidden="true">{cat.icon}</span>
+                        <span className="text-xs font-semibold flex-1 text-left">{cat.name}</span>
+                        <div className="flex items-center gap-2 mr-2">
+                          {errors.length > 0 && (
+                            <span className="flex items-center gap-0.5 text-[10px] text-red-400">
+                              <XCircle className="w-3 h-3" />{errors.length}
+                            </span>
+                          )}
+                          {warnings.length > 0 && (
+                            <span className="flex items-center gap-0.5 text-[10px] text-yellow-400">
+                              <AlertTriangle className="w-3 h-3" />{warnings.length}
+                            </span>
+                          )}
+                          {successes.length > 0 && (
+                            <span className="flex items-center gap-0.5 text-[10px] text-green-400">
+                              <CheckCircle2 className="w-3 h-3" />{successes.length}
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown className={`w-3.5 h-3.5 text-neutral-500 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {isExpanded && (
+                        <div className="px-4 pb-4 pt-1 border-t border-white/5 space-y-2">
+                          {cat.findings.map((fi, idx) => (
+                            <div
+                              key={idx}
+                              className={`p-3 rounded-lg text-xs ${
+                                fi.type === "error"
+                                  ? "bg-red-500/5 border border-red-500/10"
+                                  : fi.type === "warning"
+                                  ? "bg-yellow-500/5 border border-yellow-500/10"
+                                  : "bg-green-500/5 border border-green-500/10"
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 mb-1">
+                                {fi.type === "error" && <XCircle className="w-3 h-3 text-red-400 shrink-0" />}
+                                {fi.type === "warning" && <AlertTriangle className="w-3 h-3 text-yellow-400 shrink-0" />}
+                                {fi.type === "success" && <CheckCircle2 className="w-3 h-3 text-green-400 shrink-0" />}
+                                <span className="font-semibold">{fi.title}</span>
+                                <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${
+                                  fi.impact === "high" ? "bg-red-500/10 text-red-400" : fi.impact === "medium" ? "bg-yellow-500/10 text-yellow-400" : "bg-neutral-500/10 text-neutral-400"
+                                }`}>{fi.impact}</span>
+                              </div>
+                              <p className="text-neutral-400 mb-1.5 leading-relaxed">{fi.description}</p>
+                              {fi.recommendation && (
+                                <p className="text-orange-300/90 leading-relaxed">→ {fi.recommendation}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </article>
-                ))}
+                  );
+                })}
               </div>
             </section>
 
-            <section className="glass-card rounded-2xl p-8" aria-labelledby="actions-heading">
-              <h2 id="actions-heading" className="text-xl font-bold mb-6 flex items-center gap-3">
-                <Zap className="w-5 h-5 text-orange-400" aria-hidden="true" />
+            <section className="glass-card rounded-xl p-5" aria-labelledby="actions-heading">
+              <h2 id="actions-heading" className="text-sm font-bold mb-4 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-orange-400" aria-hidden="true" />
                 Top 5 prioriterede handlinger
               </h2>
-              <ol className="space-y-3">
+              <ol className="space-y-2">
                 {analysis.prioritizedActions.map((action, i) => (
                   <li
                     key={i}
-                    className="flex items-start gap-4 p-4 rounded-xl bg-white/3 hover:bg-white/5 transition-colors"
+                    className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center shrink-0 text-sm font-bold text-orange-400" aria-hidden="true">
+                    <div className="w-6 h-6 rounded-md bg-orange-500/20 flex items-center justify-center shrink-0 text-xs font-bold text-orange-400" aria-hidden="true">
                       {i + 1}
                     </div>
-                    <p className="text-sm text-neutral-200 leading-relaxed pt-1">
+                    <p className="text-xs text-neutral-200 leading-relaxed pt-0.5">
                       {action}
                     </p>
                   </li>
@@ -246,11 +326,11 @@ export default function ResultsClient() {
             </section>
 
             {screenshot && (
-              <section className="glass-card rounded-2xl p-6" aria-label="Screenshot">
-                <h2 className="text-lg font-bold mb-4">
+              <section className="glass-card rounded-xl p-5" aria-label="Screenshot">
+                <h2 className="text-sm font-bold mb-3">
                   Screenshot (Above the Fold)
                 </h2>
-                <div className="rounded-xl overflow-hidden border border-white/10">
+                <div className="rounded-lg overflow-hidden border border-white/10">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={screenshot}

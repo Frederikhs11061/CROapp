@@ -805,120 +805,298 @@ export function analyzeWebsite(data: ScrapedData, pageSpeed: PageSpeedData | nul
   };
 }
 
-// ─── A/B Test Ideas (60+ pool, context-filtered) ────────────────
+// ─── A/B Test Ideas (dynamic, concrete, based on scraped data) ──
 
-const AB_TEST_POOL: Omit<ABTestIdea, "id">[] = [
-  // ── Headlines ──
-  { title: "Headline: Benefit vs. Feature", hypothesis: "En benefit-orienteret headline konverterer bedre end en feature-baseret", variantA: "Nuværende headline", variantB: "Headline med konkret kundefordel", metric: "Konverteringsrate / engagement", expectedImpact: "high", category: "above-the-fold", pageTypes: ["forside", "landingsside", "produktside"] },
-  { title: "Headline: Specifik vs. Generisk", hypothesis: "Specifikke tal/resultater i headline øger troværdighed", variantA: "Nuværende headline", variantB: "Headline med specifikt tal/resultat (fx 'Spar 30%', '1.200+ tilfredse kunder')", metric: "Tid på side / CTA-klik", expectedImpact: "medium", category: "above-the-fold", pageTypes: ["forside", "landingsside"] },
-  { title: "Headline: Spørgsmål vs. Påstand", hypothesis: "Et spørgsmål der adresserer kundens smertepunkt skaber mere engagement", variantA: "Nuværende påstand-headline", variantB: "Spørgsmåls-headline ('Træt af [problem]?')", metric: "Scroll depth / CTA-klik", expectedImpact: "medium", category: "above-the-fold", pageTypes: ["forside", "landingsside"] },
-  { title: "Headline: Kort vs. Lang", hypothesis: "En kortere, punchier headline fanger opmærksomheden hurtigere", variantA: "Nuværende headline", variantB: "Forkortet version (max 6-8 ord)", metric: "Bounce rate / engagement", expectedImpact: "medium", category: "above-the-fold", pageTypes: ["forside", "landingsside"] },
-  { title: "Underoverskrift: Med vs. Uden", hypothesis: "En underoverskrift der uddyber value prop øger forståelsen", variantA: "Uden underoverskrift", variantB: "Med underoverskrift der forklarer 'hvad + for hvem + hvorfor'", metric: "Konverteringsrate", expectedImpact: "medium", category: "above-the-fold", pageTypes: ["forside", "landingsside"] },
-
-  // ── CTA ──
-  { title: "CTA-tekst: Handlingsord vs. Generisk", hypothesis: "Specifikke handlingsord konverterer bedre end 'Læs mere'", variantA: "Generisk CTA ('Læs mere', 'Klik her')", variantB: "Specifik CTA ('Se vores udvalg', 'Få gratis tilbud')", metric: "CTR på CTA", expectedImpact: "high", category: "cta", pageTypes: ["forside", "landingsside", "produktside", "kollektionsside"] },
-  { title: "CTA-tekst: Med benefit vs. Uden", hypothesis: "CTA med benefit i teksten øger klikrate", variantA: "'Køb nu'", variantB: "'Køb nu – Fri fragt i dag'", metric: "CTR / konverteringsrate", expectedImpact: "high", category: "cta", pageTypes: ["produktside"] },
-  { title: "CTA-farve: Primær vs. Kontrastfarve", hypothesis: "Kontrastfarve der skiller sig ud øger synlighed og klik", variantA: "Nuværende CTA-farve", variantB: "Høj-kontrast farve der popper mod baggrunden", metric: "CTR på CTA", expectedImpact: "medium", category: "cta", pageTypes: ["forside", "landingsside", "produktside"] },
-  { title: "CTA-størrelse: Større knap", hypothesis: "En 20% større CTA-knap øger klikrate, især på mobil", variantA: "Nuværende størrelse", variantB: "20% større med mere padding", metric: "CTR på CTA (mobil + desktop)", expectedImpact: "medium", category: "cta", pageTypes: ["forside", "landingsside", "produktside"] },
-  { title: "CTA-placering: Above fold vs. After content", hypothesis: "CTA direkte efter value proposition konverterer bedre end længere nede", variantA: "CTA placeret under fold", variantB: "CTA flyttet til above the fold", metric: "Konverteringsrate", expectedImpact: "high", category: "cta", pageTypes: ["forside", "landingsside"] },
-  { title: "Sticky CTA på mobil", hypothesis: "En fast CTA-knap i bunden af skærmen øger konvertering på mobil", variantA: "Normal CTA (scroller med)", variantB: "Sticky CTA i bunden af mobil-viewet", metric: "Mobil konverteringsrate", expectedImpact: "high", category: "cta", pageTypes: ["produktside", "landingsside"] },
-  { title: "Antal CTAs: Én vs. Gentaget", hypothesis: "CTA gentaget 2-3 gange på siden øger konvertering (gentagelsesloven)", variantA: "Kun 1 CTA", variantB: "CTA gentaget efter hero, midt og bund", metric: "Konverteringsrate", expectedImpact: "medium", category: "cta", pageTypes: ["forside", "landingsside"] },
-  { title: "CTA: 'Læg i kurv' vs. 'Køb nu'", hypothesis: "Direkte købs-sprog kan øge konvertering for impulskøb", variantA: "'Læg i kurv'", variantB: "'Køb nu'", metric: "Add-to-cart rate / konverteringsrate", expectedImpact: "medium", category: "cta", pageTypes: ["produktside"] },
-
-  // ── Social Proof ──
-  { title: "Trustpilot-widget: Med vs. Uden", hypothesis: "Synlig Trustpilot-score øger tillid og konvertering", variantA: "Uden Trustpilot", variantB: "Trustpilot-widget med score above the fold", metric: "Konverteringsrate / bounce rate", expectedImpact: "high", category: "social-proof", pageTypes: ["forside", "produktside", "landingsside"] },
-  { title: "Kundecitater: Med foto vs. Uden", hypothesis: "Testimonials med billede virker mere troværdige", variantA: "Citat med kun tekst + navn", variantB: "Citat med foto, navn og titel", metric: "Engagement / konverteringsrate", expectedImpact: "medium", category: "social-proof", pageTypes: ["forside", "landingsside"] },
-  { title: "Social proof placering: Header vs. Sektion", hypothesis: "'1.200+ tilfredse kunder' i header øger tillid fra første sekund", variantA: "Social proof i dedikeret sektion nede", variantB: "Kort social proof-linje direkte under headline", metric: "Bounce rate / konverteringsrate", expectedImpact: "medium", category: "social-proof", pageTypes: ["forside", "landingsside"] },
-  { title: "Antal reviews synlige: Få vs. Mange", hypothesis: "At vise antal anmeldelser ('baseret på 847 anmeldelser') øger troværdighed", variantA: "Stjernerating uden antal", variantB: "Stjernerating + 'baseret på X anmeldelser'", metric: "Konverteringsrate", expectedImpact: "medium", category: "social-proof", pageTypes: ["produktside"] },
-  { title: "Trust badges: Tæt på CTA vs. Footer", hypothesis: "Trust badges placeret direkte ved CTA reducerer købs-angst", variantA: "Trust badges kun i footer", variantB: "Trust badges lige under/ved CTA-knap", metric: "Konverteringsrate", expectedImpact: "high", category: "social-proof", pageTypes: ["produktside", "checkout"] },
-  { title: "Logo-bar: Kendte brands/medier", hypothesis: "'Som set i...' eller partner-logoer øger autoritet", variantA: "Uden logo-bar", variantB: "Logo-bar med kendte brands/medier above the fold", metric: "Bounce rate / tillid", expectedImpact: "medium", category: "social-proof", pageTypes: ["forside", "landingsside"] },
-  { title: "Garanti-badge design: Tekst vs. Visuelt", hypothesis: "Et visuelt garanti-badge med ikon konverterer bedre end ren tekst", variantA: "Tekst: '30 dages returret'", variantB: "Visuelt badge med ikon + '30 dages returret'", metric: "Konverteringsrate", expectedImpact: "medium", category: "social-proof", pageTypes: ["produktside"] },
-
-  // ── Indhold & Copy ──
-  { title: "Produktbeskrivelse: Benefits vs. Features", hypothesis: "Benefit-first beskrivelse konverterer bedre end feature-list", variantA: "Feature-fokuseret beskrivelse", variantB: "Benefit-first, derefter features som understøttende", metric: "Add-to-cart rate", expectedImpact: "high", category: "content", pageTypes: ["produktside"] },
-  { title: "Copy-længde: Kort vs. Detaljeret", hypothesis: "Mere detaljeret copy med bullet points performer bedre for komplekse produkter", variantA: "Kort beskrivelse (2-3 linjer)", variantB: "Detaljeret med bullets, benefits og FAQ", metric: "Konverteringsrate / tid på side", expectedImpact: "medium", category: "content", pageTypes: ["produktside", "landingsside"] },
-  { title: "Tone of voice: Formel vs. Uformel", hypothesis: "En mere personlig, uformel tone matcher bedre med din målgruppe", variantA: "Formel, professionel tone", variantB: "Uformel, personlig tone (du-form, hverdagssprog)", metric: "Engagement / konverteringsrate", expectedImpact: "medium", category: "content", pageTypes: ["forside", "landingsside"] },
-  { title: "USP-bar: Med vs. Uden", hypothesis: "3-5 USP'er under header øger værdi-opfattelse", variantA: "Uden USP-bar", variantB: "USP-bar med ikoner: '✓ Fri fragt ✓ 30 dages retur ✓ Dansk support'", metric: "Bounce rate / konverteringsrate", expectedImpact: "high", category: "content", pageTypes: ["forside", "produktside", "kollektionsside"] },
-  { title: "Produkt-USP'er: Over vs. Under fold", hypothesis: "USP'er synlige med det samme øger opfattet værdi", variantA: "USP'er under folden", variantB: "USP'er direkte under produktnavn/pris", metric: "Add-to-cart rate", expectedImpact: "medium", category: "content", pageTypes: ["produktside"] },
-  { title: "'Sådan virker det' sektion", hypothesis: "En klar step-by-step proces reducerer usikkerhed", variantA: "Uden 'Sådan virker det'", variantB: "3-step visuelt flow: Vælg → Bestil → Modtag", metric: "Konverteringsrate / tid på side", expectedImpact: "medium", category: "content", pageTypes: ["forside", "landingsside"] },
-
-  // ── Navigation & Struktur ──
-  { title: "Menupunkter: Færre vs. Flere", hypothesis: "Reduceret navigation (max 5-7) giver mere fokus", variantA: "Nuværende antal menupunkter", variantB: "Reduceret til 5-7 primære + dropdown for resten", metric: "Navigation-klik / bounce rate", expectedImpact: "medium", category: "navigation", pageTypes: ["forside", "kollektionsside"] },
-  { title: "Mega-menu vs. Simpel dropdown", hypothesis: "En visuelt rig mega-menu med billeder øger kategori-engagement", variantA: "Standard tekst-dropdown", variantB: "Mega-menu med kategori-billeder og bestsellers", metric: "Kategori-klik / sessioner per besøg", expectedImpact: "medium", category: "navigation", pageTypes: ["forside", "kollektionsside"] },
-  { title: "Breadcrumbs: Med vs. Uden", hypothesis: "Breadcrumbs forbedrer navigation og reducerer bounce", variantA: "Uden breadcrumbs", variantB: "Breadcrumbs: 'Forside > Kategori > Produkt'", metric: "Bounce rate / sider per session", expectedImpact: "low", category: "navigation", pageTypes: ["produktside", "kollektionsside"] },
-  { title: "Søgefelt: Prominent vs. Skjult", hypothesis: "Et synligt søgefelt øger produktfund og konvertering", variantA: "Søge-ikon (kræver klik)", variantB: "Åbent søgefelt i header med placeholder-tekst", metric: "Søge-brug / konverteringsrate", expectedImpact: "medium", category: "navigation", pageTypes: ["forside", "kollektionsside"] },
-
-  // ── Design & UX ──
-  { title: "Hero-billede: Produkt vs. Lifestyle", hypothesis: "Lifestyle-billede der viser produktet i brug performer bedre", variantA: "Produktbillede på hvid baggrund", variantB: "Lifestyle-foto med produktet i brug", metric: "Engagement / konverteringsrate", expectedImpact: "medium", category: "design", pageTypes: ["forside", "produktside", "landingsside"] },
-  { title: "Hero: Statisk billede vs. Video", hypothesis: "En kort video above the fold øger engagement markant", variantA: "Statisk hero-billede", variantB: "15-30 sek. auto-play video (muted)", metric: "Tid på side / konverteringsrate", expectedImpact: "medium", category: "design", pageTypes: ["forside", "landingsside"] },
-  { title: "Produktbilleder: Antal vinkler", hypothesis: "Flere produktbilleder (4-6 vinkler) reducerer usikkerhed", variantA: "1-2 produktbilleder", variantB: "4-6 billeder fra forskellige vinkler + zoom", metric: "Add-to-cart rate / returrate", expectedImpact: "high", category: "design", pageTypes: ["produktside"] },
-  { title: "Baggrundsskift mellem sektioner", hypothesis: "Alternerende baggrundfarver gør indhold nemmere at scanne", variantA: "Ensartet baggrund hele vejen", variantB: "Skiftende lys/mørk baggrund per sektion", metric: "Scroll depth / engagement", expectedImpact: "low", category: "design", pageTypes: ["forside", "landingsside"] },
-  { title: "Produktside layout: Billede størrelse", hypothesis: "Større produktbillede (60% af viewport) øger konvertering", variantA: "Nuværende billede-størrelse", variantB: "Billede udvidet til 60%+ af viewport-bredde", metric: "Add-to-cart rate", expectedImpact: "medium", category: "design", pageTypes: ["produktside"] },
-
-  // ── Performance ──
-  { title: "Lazy loading: Med vs. Uden", hypothesis: "Lazy loading af billeder under fold forbedrer initial loadtid", variantA: "Alle billeder loader med det samme", variantB: "Lazy loading på alle billeder under fold", metric: "LCP / konverteringsrate", expectedImpact: "high", category: "mobile", pageTypes: ["forside", "kollektionsside", "produktside"] },
-  { title: "Billedformat: JPEG vs. WebP/AVIF", hypothesis: "Moderne billedformater reducerer filstørrelse med 30-50%", variantA: "JPEG/PNG billeder", variantB: "WebP/AVIF med fallback", metric: "Loadtid / Lighthouse score", expectedImpact: "medium", category: "mobile", pageTypes: ["forside", "kollektionsside", "produktside"] },
-
-  // ── Konvertering ──
-  { title: "Prisvisning: Besparelse synlig", hypothesis: "'Spar X kr' ved siden af prisen øger opfattet værdi", variantA: "Kun nuværende pris", variantB: "Førpris + nupris + 'Spar 25%'", metric: "Konverteringsrate", expectedImpact: "high", category: "conversion", pageTypes: ["produktside", "kollektionsside"] },
-  { title: "Urgency: Countdown timer", hypothesis: "En countdown timer for tilbud skaber urgency der konverterer", variantA: "Ingen urgency-elementer", variantB: "Countdown timer: 'Tilbud udløber om X timer'", metric: "Konverteringsrate", expectedImpact: "high", category: "conversion", pageTypes: ["produktside", "landingsside"] },
-  { title: "Lagerstatus: Synlig vs. Skjult", hypothesis: "'Kun 3 på lager' skaber scarcity og motiverer hurtig handling", variantA: "Ingen lagerstatus synlig", variantB: "'Kun X tilbage på lager' badge", metric: "Konverteringsrate / tid til køb", expectedImpact: "medium", category: "conversion", pageTypes: ["produktside"] },
-  { title: "Leveringstid: Specifik vs. Generel", hypothesis: "'Levering torsdag d. 27.' konverterer bedre end '2-3 hverdage'", variantA: "'Levering i 2-3 hverdage'", variantB: "'Bestil inden 14:00 – leveret [specifik dag]'", metric: "Konverteringsrate", expectedImpact: "medium", category: "conversion", pageTypes: ["produktside"] },
-  { title: "Gratis fragt tærskel: Synlig vs. Skjult", hypothesis: "En synlig fragt-tærskel øger gennemsnitlig ordreværdi", variantA: "Fragt nævnt først i checkout", variantB: "Banner: 'Fri fragt ved køb over 499 kr – du mangler X kr'", metric: "AOV / konverteringsrate", expectedImpact: "high", category: "conversion", pageTypes: ["produktside", "kurv"] },
-  { title: "Nyhedsbrev popup: Rabat vs. Indhold", hypothesis: "10% rabat som incitament konverterer bedre end 'Tips & tricks'", variantA: "Popup: 'Tilmeld dig vores nyhedsbrev'", variantB: "Popup: 'Få 10% rabat – Tilmeld dig nu'", metric: "Email signup rate", expectedImpact: "high", category: "conversion", pageTypes: ["forside", "kollektionsside"] },
-  { title: "Exit-intent popup", hypothesis: "Et tilbud når brugeren er ved at forlade øger recovery", variantA: "Ingen exit-intent", variantB: "Exit popup med specialtilbud / rabatkode", metric: "Exit rate / konverteringsrate", expectedImpact: "medium", category: "conversion", pageTypes: ["produktside", "landingsside"] },
-  { title: "Cross-sell: 'Andre køber også'", hypothesis: "Produktanbefalinger øger gennemsnitlig ordreværdi", variantA: "Ingen cross-sell", variantB: "'Kunder der købte dette, købte også...' sektion", metric: "AOV / items per ordre", expectedImpact: "medium", category: "conversion", pageTypes: ["produktside", "kurv"] },
-  { title: "Betalingsmetoder: Synlige vs. Skjulte", hypothesis: "Synlige betalingsikoner (MobilePay, Visa, etc.) øger tillid", variantA: "Betalingsmetoder nævnt i footer", variantB: "Betalingsikoner synlige tæt på CTA / i header", metric: "Konverteringsrate", expectedImpact: "medium", category: "conversion", pageTypes: ["produktside", "kurv"] },
-
-  // ── Friktion ──
-  { title: "Formular: Antal felter", hypothesis: "Færre formularfelter (3-4 vs. 6+) øger completion rate", variantA: "Nuværende antal felter", variantB: "Reduceret til kun nødvendige felter (3-4)", metric: "Form completion rate", expectedImpact: "high", category: "friction", pageTypes: ["landingsside", "checkout"] },
-  { title: "Checkout: Gæste-checkout vs. Påkrævet login", hypothesis: "Gæste-checkout reducerer abandoned carts markant", variantA: "Login påkrævet før checkout", variantB: "Gæste-checkout option fremhævet", metric: "Checkout completion rate", expectedImpact: "high", category: "friction", pageTypes: ["checkout"] },
-  { title: "Checkout: Single page vs. Multi-step", hypothesis: "Single page checkout med synlig progress reducerer tab", variantA: "Multi-step checkout", variantB: "Single page med accordion-sektioner", metric: "Checkout completion rate", expectedImpact: "medium", category: "friction", pageTypes: ["checkout"] },
-  { title: "Formular: Inline validation vs. Submit validation", hypothesis: "Realtids-validering af felter reducerer fejl og frustration", variantA: "Fejlbeskeder efter submit", variantB: "Inline validering i realtid (grøn checkmark/rød fejl)", metric: "Form completion rate / tid til completion", expectedImpact: "medium", category: "friction", pageTypes: ["checkout", "landingsside"] },
-  { title: "Checkout: Progress-indikator", hypothesis: "At vise trin i checkout-processen reducerer anxiety", variantA: "Uden progress bar", variantB: "Trin 1-2-3 progress bar i toppen", metric: "Checkout completion rate", expectedImpact: "medium", category: "friction", pageTypes: ["checkout"] },
-  { title: "FAQ: Folded vs. Expanded", hypothesis: "En FAQ-sektion synlig på produkt/landing page adresserer tvivl", variantA: "Ingen FAQ synlig", variantB: "FAQ-sektion med de 5 mest stillede spørgsmål", metric: "Konverteringsrate / support-henvendelser", expectedImpact: "medium", category: "friction", pageTypes: ["produktside", "landingsside"] },
-  { title: "Distraktion: Fjern sidebar/ads", hypothesis: "Renere layout uden distraktioner øger fokus på konvertering", variantA: "Nuværende layout med sideelementer", variantB: "Cleaner layout med fokus på primær CTA", metric: "Konverteringsrate", expectedImpact: "medium", category: "friction", pageTypes: ["landingsside", "produktside"] },
-  { title: "Thank you-page optimering", hypothesis: "En optimeret tak-side med next-step CTA øger customer lifetime value", variantA: "Standard 'Tak for dit køb'", variantB: "Tak + relaterede produkter + 'Fortæl en ven, få 10% rabat'", metric: "Repeat purchase / referral rate", expectedImpact: "medium", category: "friction", pageTypes: ["checkout"] },
-
-  // ── Mobil-specifikke ──
-  { title: "Mobil: Sticky add-to-cart", hypothesis: "Sticky CTA på mobil holder købsmuligheden altid synlig", variantA: "CTA scroller med", variantB: "Sticky CTA-bar i bunden med pris + 'Køb nu'", metric: "Mobil konverteringsrate", expectedImpact: "high", category: "mobile", pageTypes: ["produktside"] },
-  { title: "Mobil: Hamburger vs. Bottom nav", hypothesis: "Bottom navigation øger mobil engagement vs. hamburger menu", variantA: "Hamburger menu (top)", variantB: "Bottom tab navigation (Home, Søg, Kurv, Konto)", metric: "Navigation usage / sider per session", expectedImpact: "medium", category: "mobile", pageTypes: ["forside", "kollektionsside"] },
-  { title: "Mobil: Tap targets størrelse", hypothesis: "Større tap targets (min. 44px) reducerer fejlklik og frustration", variantA: "Nuværende knap-størrelser", variantB: "Alle interaktive elementer min. 44x44px", metric: "Fejlklik / engagement", expectedImpact: "medium", category: "mobile", pageTypes: ["forside", "produktside", "kollektionsside"] },
-
-  // ── Kollektionsside specifik ──
-  { title: "Produktgrid: 3 vs. 4 kolonner", hypothesis: "3 kolonner med større billeder øger produktengagement", variantA: "4-kolonne grid", variantB: "3-kolonne grid med større billeder", metric: "Produkt-klik / konverteringsrate", expectedImpact: "medium", category: "design", pageTypes: ["kollektionsside"] },
-  { title: "Quick-add-to-cart på produktkort", hypothesis: "Mulighed for at tilføje til kurv uden at åbne PDP sparer tid", variantA: "Kun 'Se produkt' link", variantB: "'Quick add' knap direkte på produktkortet", metric: "Add-to-cart rate / konverteringsrate", expectedImpact: "high", category: "conversion", pageTypes: ["kollektionsside"] },
-  { title: "Filtrering: Sidebar vs. Top-bar", hypothesis: "Top-bar filtrering er mere synlig og bruges oftere", variantA: "Sidebar filtrering (skjult på mobil)", variantB: "Top-bar filtrering med chips", metric: "Filter usage / konverteringsrate", expectedImpact: "medium", category: "navigation", pageTypes: ["kollektionsside"] },
-];
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
 
 function generateABTestIdeas(ctx: AnalysisContext, categories: Category[]): ABTestIdea[] {
-  const { pageType } = ctx;
-  const errorCategories = new Set(
-    categories.filter((c) => c.score < 60).map((c) => c.name)
-  );
-  const warningFindings = categories.flatMap((c) => c.findings).filter((f) => f.type !== "success");
+  const { data, pageType } = ctx;
+  const ideas: (Omit<ABTestIdea, "id"> & { _priority: number })[] = [];
+  const errorCategories = new Set(categories.filter((c) => c.score < 60).map((c) => c.name));
 
-  const relevant = AB_TEST_POOL
-    .filter((idea) => idea.pageTypes.includes(pageType))
-    .map((idea, i) => {
-      let priority = 0;
-      if (idea.expectedImpact === "high") priority += 3;
-      if (idea.expectedImpact === "medium") priority += 1;
-      const catName = ANALYSIS_CATEGORIES.find((c) => c.key === idea.category)?.name;
-      if (catName && errorCategories.has(catName)) priority += 5;
-      const relatedWarning = warningFindings.some((w) =>
-        w.title.toLowerCase().includes(idea.title.toLowerCase().slice(0, 10)) ||
-        idea.category === "cta" && w.law?.includes("Synlighed") ||
-        idea.category === "social-proof" && w.law?.includes("Tillid") ||
-        idea.category === "friction" && w.law?.includes("Friktion")
-      );
-      if (relatedWarning) priority += 3;
-      return { ...idea, id: i + 1, _priority: priority };
-    })
+  const h1 = data.headings.find((h) => h.tag === "h1")?.text?.trim() || "";
+  const heroText = data.firstScreenContent.heroText?.trim() || h1;
+  const heroSub = data.firstScreenContent.heroSubtext?.trim() || "";
+  const primaryCta = data.ctas.find((c) => c.isPrimary)?.text?.trim() || data.ctas[0]?.text?.trim() || "";
+  const allCtaTexts = data.ctas.map((c) => c.text.trim()).filter(Boolean);
+  const usps = data.copyAnalysis.usps;
+  const benefits = data.copyAnalysis.benefitStatements;
+  const navCount = data.structuralInfo.navItemCount;
+
+  function pri(base: number, cat: string): number {
+    const catName = ANALYSIS_CATEGORIES.find((c) => c.key === cat)?.name;
+    return base + (catName && errorCategories.has(catName) ? 5 : 0);
+  }
+
+  // ── Headlines (only when we have actual headline data) ──
+  if (heroText) {
+    const words = heroText.split(/\s+/);
+    ideas.push({
+      title: "Headline: Benefit-fokuseret",
+      hypothesis: "En headline der starter med kundens udbytte konverterer bedre end en der beskriver produktet",
+      variantA: `"${truncate(heroText, 80)}"`,
+      variantB: `"Opnå [primær fordel] med ${truncate(heroText.split(" ").slice(-2).join(" "), 30)} – uden besvær"`,
+      metric: "Konverteringsrate / engagement",
+      expectedImpact: "high", category: "above-the-fold", pageTypes: [pageType], _priority: pri(8, "above-the-fold"),
+    });
+    if (words.length > 8) {
+      ideas.push({
+        title: "Headline: Kortere & mere punchy",
+        hypothesis: `Din headline er ${words.length} ord – en kortere version (5-8 ord) fanger hurtigere`,
+        variantA: `"${truncate(heroText, 80)}"`,
+        variantB: `"${truncate(words.slice(0, 6).join(" "), 60)}"`,
+        metric: "Bounce rate / engagement",
+        expectedImpact: "medium", category: "above-the-fold", pageTypes: [pageType], _priority: pri(5, "above-the-fold"),
+      });
+    }
+    ideas.push({
+      title: "Headline: Spørgsmål vs. påstand",
+      hypothesis: "Et spørgsmål der rammer kundens smertepunkt skaber mere engagement end en påstand",
+      variantA: `"${truncate(heroText, 80)}"`,
+      variantB: `"Kæmper du med [det problem din målgruppe har]? – Prøv ${data.title.split(" ")[0] || "vores løsning"}"`,
+      metric: "Scroll depth / CTA-klik",
+      expectedImpact: "medium", category: "above-the-fold", pageTypes: [pageType], _priority: pri(5, "above-the-fold"),
+    });
+    ideas.push({
+      title: "Headline: Med socialt bevis",
+      hypothesis: "Et tal/socialt bevis i headline øger troværdighed ('Brugt af 2.000+ virksomheder')",
+      variantA: `"${truncate(heroText, 80)}"`,
+      variantB: `"${truncate(heroText, 50)} – Valgt af [X]+ kunder"`,
+      metric: "Tid på side / konverteringsrate",
+      expectedImpact: "high", category: "above-the-fold", pageTypes: [pageType], _priority: pri(7, "above-the-fold"),
+    });
+  }
+
+  // Subheadline
+  if (!heroSub && heroText) {
+    ideas.push({
+      title: "Tilføj underoverskrift",
+      hypothesis: "En underoverskrift der uddyber value prop øger forståelsen og reducerer bounce",
+      variantA: `Kun headline: "${truncate(heroText, 60)}" (ingen underoverskrift)`,
+      variantB: `Headline + underoverskrift: "${truncate(heroText, 40)}" + "Vi hjælper [målgruppe] med at [opnå resultat] – hurtigt og nemt"`,
+      metric: "Konverteringsrate / bounce rate",
+      expectedImpact: "medium", category: "above-the-fold", pageTypes: [pageType], _priority: pri(5, "above-the-fold"),
+    });
+  }
+
+  // ── CTA (always concrete) ──
+  if (primaryCta) {
+    const isGeneric = /^(læs mere|klik her|se mere|learn more|read more|click here|submit|send)$/i.test(primaryCta);
+    if (isGeneric) {
+      ideas.push({
+        title: "CTA: Specifik handlingstekst",
+        hypothesis: `"${primaryCta}" er for generisk – en specifik CTA konverterer 20-30% bedre`,
+        variantA: `"${primaryCta}"`,
+        variantB: pageType === "produktside" ? `"Tilføj til kurv – Fri fragt i dag"` : `"Se vores udvalg" eller "Få gratis tilbud nu"`,
+        metric: "CTR på CTA",
+        expectedImpact: "high", category: "cta", pageTypes: [pageType], _priority: pri(9, "cta"),
+      });
+    }
+    ideas.push({
+      title: "CTA: Med benefit-tekst",
+      hypothesis: "En CTA der kommunikerer en fordel konverterer bedre end en uden",
+      variantA: `"${truncate(primaryCta, 40)}"`,
+      variantB: `"${truncate(primaryCta, 25)} – ${usps[0] || "Gratis levering"}"`,
+      metric: "CTR / konverteringsrate",
+      expectedImpact: "high", category: "cta", pageTypes: [pageType], _priority: pri(8, "cta"),
+    });
+  }
+
+  if (allCtaTexts.length <= 1) {
+    ideas.push({
+      title: "CTA: Gentag 2-3 gange på siden",
+      hypothesis: "Kun 1 CTA på siden – gentagelse af CTA (hero, midt, bund) øger konvertering jf. gentagelsesloven",
+      variantA: `Kun 1 CTA: "${truncate(primaryCta || "primær CTA", 40)}"`,
+      variantB: `CTA gentaget 3 steder: efter hero, efter social proof, og før footer`,
+      metric: "Konverteringsrate",
+      expectedImpact: "medium", category: "cta", pageTypes: [pageType], _priority: pri(6, "cta"),
+    });
+  }
+
+  if (data.ctas.every((c) => !c.isAboveFold)) {
+    ideas.push({
+      title: "CTA: Flyt above the fold",
+      hypothesis: "Ingen CTA er synlig uden scrolling – flytning til above the fold kan øge konvertering markant",
+      variantA: `CTA "${truncate(primaryCta || "primær CTA", 30)}" placeret under fold`,
+      variantB: `CTA flyttet direkte under headline/hero-sektion`,
+      metric: "Konverteringsrate",
+      expectedImpact: "high", category: "cta", pageTypes: [pageType], _priority: pri(9, "cta"),
+    });
+  }
+
+  if (pageType === "produktside") {
+    ideas.push({
+      title: "Sticky CTA på mobil",
+      hypothesis: "En fast CTA-bar i bunden holder købsmuligheden synlig ved scroll",
+      variantA: `CTA "${truncate(primaryCta || "Læg i kurv", 30)}" scroller med indholdet`,
+      variantB: `Sticky bar i bunden: pris + "${truncate(primaryCta || "Køb nu", 20)}" altid synlig`,
+      metric: "Mobil konverteringsrate",
+      expectedImpact: "high", category: "cta", pageTypes: [pageType], _priority: pri(7, "cta"),
+    });
+  }
+
+  // ── Social Proof ──
+  const hasTrustpilot = data.trustSignals.some((t) => /trustpilot/i.test(t.description));
+  if (!hasTrustpilot) {
+    ideas.push({
+      title: "Tilføj Trustpilot-widget",
+      hypothesis: "En Trustpilot-score above the fold øger tillid og konvertering med op til 15%",
+      variantA: "Ingen Trustpilot-widget synlig",
+      variantB: `Trustpilot-widget med score (fx "⭐ 4.7/5 baseret på 324 anmeldelser") under headline`,
+      metric: "Konverteringsrate / bounce rate",
+      expectedImpact: "high", category: "social-proof", pageTypes: [pageType], _priority: pri(8, "social-proof"),
+    });
+  }
+
+  if (!data.firstScreenContent.hasSocialProofAboveFold) {
+    ideas.push({
+      title: "Social proof above the fold",
+      hypothesis: "Social proof placeret tidligt i viewport øger tillid fra første sekund",
+      variantA: "Ingen social proof synlig above the fold",
+      variantB: `Tilføj en linje under headline: "Betroet af [X]+ kunder" eller "⭐ 4.8/5 på Trustpilot"`,
+      metric: "Bounce rate / konverteringsrate",
+      expectedImpact: "medium", category: "social-proof", pageTypes: [pageType], _priority: pri(6, "social-proof"),
+    });
+  }
+
+  if (pageType === "produktside" || pageType === "checkout") {
+    ideas.push({
+      title: "Trust badges tæt på CTA",
+      hypothesis: "Trust badges (sikkerhedscertifikater, betalingsikoner) direkte ved CTA reducerer købs-angst",
+      variantA: `Trust badges kun i footer / ikke synlige nær "${truncate(primaryCta || "Køb nu", 20)}"`,
+      variantB: `Betalingsikoner (MobilePay, Visa, Mastercard) + "🔒 Sikker betaling" direkte under CTA`,
+      metric: "Konverteringsrate",
+      expectedImpact: "high", category: "social-proof", pageTypes: [pageType], _priority: pri(8, "social-proof"),
+    });
+  }
+
+  // ── Content & Copy ──
+  if (usps.length === 0) {
+    ideas.push({
+      title: "USP-bar: Tilføj synlige fordele",
+      hypothesis: "3-5 tydelige USP'er under header øger opfattet værdi og reducerer bounce",
+      variantA: "Ingen USP-bar synlig",
+      variantB: `USP-bar med ikoner: "✓ Fri fragt ✓ 30 dages retur ✓ Dansk support ✓ Hurtig levering"`,
+      metric: "Bounce rate / konverteringsrate",
+      expectedImpact: "high", category: "content", pageTypes: [pageType], _priority: pri(8, "content"),
+    });
+  } else if (usps.length > 0) {
+    ideas.push({
+      title: "USP-bar: Omformulér til benefits",
+      hypothesis: "USP'er formuleret som kundefordele konverterer bedre end features",
+      variantA: `Nuværende USP'er: "${usps.slice(0, 3).map((u) => truncate(u, 30)).join('" | "')}"`,
+      variantB: `Benefit-fokuseret: "Spar tid med [feature]" | "Tryg handel – 30 dages retur" | "Gratis fragt over 499 kr"`,
+      metric: "Konverteringsrate",
+      expectedImpact: "medium", category: "content", pageTypes: [pageType], _priority: pri(5, "content"),
+    });
+  }
+
+  if (benefits.length === 0 && pageType === "produktside") {
+    ideas.push({
+      title: "Produktbeskrivelse: Benefits first",
+      hypothesis: "Kunder køber fordele, ikke features – en benefit-first beskrivelse konverterer bedre",
+      variantA: `Nuværende feature-beskrivelse (ingen tydelige benefits fundet)`,
+      variantB: `Start med: "Det får du: ✓ [fordel 1] ✓ [fordel 2] ✓ [fordel 3]" – derefter features som understøttende`,
+      metric: "Add-to-cart rate",
+      expectedImpact: "high", category: "content", pageTypes: [pageType], _priority: pri(8, "content"),
+    });
+  }
+
+  if (!data.structuralInfo.hasFAQ) {
+    ideas.push({
+      title: "Tilføj FAQ-sektion",
+      hypothesis: "En FAQ adresserer tvivl og reducerer barrierer – typisk 5-10% konverteringsløft",
+      variantA: "Ingen FAQ synlig på siden",
+      variantB: `FAQ med 5 spørgsmål: "Hvad er leverings-tiden?", "Kan jeg returnere?", "Hvordan betaler jeg?", "Er det sikkert?", "Hvem er I?"`,
+      metric: "Konverteringsrate / support-henvendelser",
+      expectedImpact: "medium", category: "content", pageTypes: [pageType], _priority: pri(5, "content"),
+    });
+  }
+
+  // ── Navigation ──
+  if (navCount > 7) {
+    ideas.push({
+      title: `Navigation: Reducer fra ${navCount} til max 7 menupunkter`,
+      hypothesis: "For mange menupunkter overbelaster – Hick's Law siger færre valg = hurtigere beslutning",
+      variantA: `${navCount} menupunkter i navigation`,
+      variantB: `5-7 primære punkter + "Mere" dropdown for resten`,
+      metric: "Navigation-klik / bounce rate",
+      expectedImpact: "medium", category: "navigation", pageTypes: [pageType], _priority: pri(5, "navigation"),
+    });
+  }
+
+  if (!data.structuralInfo.hasBreadcrumbs && (pageType === "produktside" || pageType === "kollektionsside")) {
+    ideas.push({
+      title: "Tilføj breadcrumbs",
+      hypothesis: "Breadcrumbs forbedrer navigation og reducerer bounce – plus SEO-fordele",
+      variantA: "Ingen breadcrumbs",
+      variantB: `Breadcrumbs: "Forside > [Kategori] > [Sidenavn]"`,
+      metric: "Bounce rate / sider per session",
+      expectedImpact: "low", category: "navigation", pageTypes: [pageType], _priority: pri(3, "navigation"),
+    });
+  }
+
+  // ── Konvertering ──
+  if (data.copyAnalysis.urgencyElements.length === 0) {
+    ideas.push({
+      title: "Urgency: Tilføj tidsbegrænset tilbud",
+      hypothesis: "Urgency-elementer skaber FOMO og motiverer hurtigere handling",
+      variantA: "Ingen urgency-elementer på siden",
+      variantB: `Countdown timer: "Tilbud udløber om 02:34:15" eller "Bestil inden 14:00 for levering i morgen"`,
+      metric: "Konverteringsrate",
+      expectedImpact: "high", category: "conversion", pageTypes: [pageType], _priority: pri(7, "conversion"),
+    });
+  }
+
+  if (pageType === "produktside" && !data.pageSignals.priceVisible) {
+    ideas.push({
+      title: "Prisvisning: Gør prisen synlig",
+      hypothesis: "En tydeligt synlig pris reducerer usikkerhed – skjulte priser øger bounce",
+      variantA: "Pris ikke umiddelbart synlig",
+      variantB: `Stor, tydelig pris: "299 kr" (evt. med "Før: 399 kr – Spar 25%") direkte ved CTA`,
+      metric: "Konverteringsrate",
+      expectedImpact: "high", category: "conversion", pageTypes: [pageType], _priority: pri(9, "conversion"),
+    });
+  }
+
+  ideas.push({
+    title: "Exit-intent popup med tilbud",
+    hypothesis: "En exit popup kan genvinde 5-15% af besøgende der er ved at forlade",
+    variantA: "Ingen exit-intent popup",
+    variantB: `Exit popup: "Vent! Få 10% rabat med koden EXIT10 – kun i dag" + email-felt`,
+    metric: "Exit rate / konverteringsrate",
+    expectedImpact: "medium", category: "conversion", pageTypes: [pageType], _priority: pri(5, "conversion"),
+  });
+
+  // ── Friktion ──
+  const bigForm = data.forms.find((fo) => fo.fields > 5);
+  if (bigForm) {
+    ideas.push({
+      title: `Formular: Reducer fra ${bigForm.fields} til 3-4 felter`,
+      hypothesis: "Hvert ekstra felt reducerer completion rate med ~11% – drop alt der ikke er kritisk",
+      variantA: `Formular med ${bigForm.fields} felter (typer: ${bigForm.fieldTypes.slice(0, 5).join(", ")})`,
+      variantB: `Kun 3-4 felter: Navn, Email, ${bigForm.fieldTypes.includes("tel") ? "Telefon" : "Besked"} (+ evt. 1 felt)`,
+      metric: "Form completion rate",
+      expectedImpact: "high", category: "friction", pageTypes: [pageType], _priority: pri(9, "friction"),
+    });
+  }
+
+  // ── Mobil ──
+  ideas.push({
+    title: "Mobil: Større tap targets",
+    hypothesis: "Interaktive elementer under 44x44px giver fejlklik og frustration på mobil",
+    variantA: "Nuværende knap-størrelser (muligvis for små)",
+    variantB: "Alle knapper og links min. 44x44px med min. 8px afstand",
+    metric: "Fejlklik / engagement",
+    expectedImpact: "medium", category: "mobile", pageTypes: [pageType], _priority: pri(4, "mobile"),
+  });
+
+  return ideas
     .sort((a, b) => b._priority - a._priority)
-    .map(({ _priority, ...idea }) => idea);
-
-  return relevant.slice(0, 15);
+    .slice(0, 15)
+    .map(({ _priority, ...idea }, i) => ({ ...idea, id: i + 1 }));
 }
 
 // ─── Competitor / Industry Benchmarking ─────────────────────────
