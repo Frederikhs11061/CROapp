@@ -1,5 +1,8 @@
 import puppeteer from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
+import chromium from "@sparticuz/chromium-min";
+
+const CHROMIUM_PACK =
+  "https://github.com/Sparticuz/chromium/releases/download/v143.0.4/chromium-v143.0.4-pack.tar";
 
 export type ScrapedData = {
   title: string;
@@ -35,7 +38,7 @@ export type ScrapedData = {
 };
 
 async function getBrowser() {
-  const executablePath = await chromium.executablePath();
+  const executablePath = await chromium.executablePath(CHROMIUM_PACK);
 
   return puppeteer.launch({
     args: chromium.args,
