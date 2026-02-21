@@ -1,4 +1,5 @@
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 
 export type ScrapedData = {
   title: string;
@@ -33,19 +34,22 @@ export type ScrapedData = {
   viewport: "desktop" | "mobile";
 };
 
+async function getBrowser() {
+  const executablePath = await chromium.executablePath();
+
+  return puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: { width: 1440, height: 900 },
+    executablePath,
+    headless: true,
+  });
+}
+
 export async function scrapeWebsite(
   url: string,
   viewport: "desktop" | "mobile" = "desktop"
 ): Promise<ScrapedData> {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-    ],
-  });
-
+  const browser = await getBrowser();
   const page = await browser.newPage();
 
   if (viewport === "mobile") {

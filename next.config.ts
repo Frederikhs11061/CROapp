@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["puppeteer"],
+  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
   images: {
     formats: ["image/avif", "image/webp"],
   },
