@@ -2,13 +2,18 @@ import OpenAI from "openai";
 import { CRO_SYSTEM_PROMPT, type AnalysisResult } from "./cro-knowledge";
 import type { ScrapedData } from "./scraper";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY environment variable is not set");
+  }
+  return new OpenAI({ apiKey });
+}
 
 export async function analyzeWithAI(
   scrapedData: ScrapedData
 ): Promise<AnalysisResult> {
+  const openai = getOpenAIClient();
   const userPrompt = buildUserPrompt(scrapedData);
 
   const response = await openai.chat.completions.create({
