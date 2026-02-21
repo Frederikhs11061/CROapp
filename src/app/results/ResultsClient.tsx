@@ -114,66 +114,97 @@ export default function ResultsClient() {
           </div>
         </div>
 
-        {/* Score hero */}
-        <section className="glass-card rounded-2xl p-5 sm:p-6 mb-6" aria-labelledby="score-heading">
-          <div className="flex flex-col lg:flex-row items-center gap-6">
-            <div className="flex flex-col items-center">
-              <ScoreRing
-                score={analysis.overallScore}
-                size={110}
-                strokeWidth={8}
-              />
-              <p className="mt-2 text-sm font-bold">
-                {getScoreLabel(analysis.overallScore)}
-              </p>
-              <p className="text-[11px] text-neutral-400 mt-0.5">
-                Sidetype: {analysis.pageType}
-              </p>
-            </div>
+        {/* Score hero – shows category score when viewing a category */}
+        {activeTab === "category" ? (() => {
+          const cat = analysis.categories[categoryIndex];
+          if (!cat) return null;
+          const catErrors = cat.findings.filter((f) => f.type === "error").length;
+          const catWarnings = cat.findings.filter((f) => f.type === "warning").length;
+          const catSuccess = cat.findings.filter((f) => f.type === "success").length;
 
-            <div className="flex-1 text-center lg:text-left">
-              <h1 id="score-heading" className="text-lg sm:text-xl font-bold mb-2">
-                CRO-analyserapport
-              </h1>
-              <p className="text-neutral-300 text-sm leading-relaxed mb-4">
-                {analysis.summary}
-              </p>
-
-              <div className="flex flex-wrap justify-center lg:justify-start gap-2" role="list" aria-label="Analyse-statistik">
-                <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5">
-                  <span className="text-sm font-bold">{totalFindings}</span>
-                  <span className="text-[11px] text-neutral-400">fund</span>
+          return (
+            <section className="glass-card rounded-2xl p-5 sm:p-6 mb-6" aria-labelledby="score-heading">
+              <div className="flex flex-col lg:flex-row items-center gap-6">
+                <div className="flex flex-col items-center">
+                  <ScoreRing score={cat.score} size={110} strokeWidth={8} />
+                  <p className="mt-2 text-sm font-bold">{getScoreLabel(cat.score)}</p>
                 </div>
-                <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10">
-                  <span className="text-sm font-bold text-red-400">{errorCount}</span>
-                  <span className="text-[11px] text-neutral-400">kritiske</span>
-                </div>
-                <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10">
-                  <span className="text-sm font-bold text-yellow-400">{warningCount}</span>
-                  <span className="text-[11px] text-neutral-400">advarsler</span>
-                </div>
-                <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10">
-                  <span className="text-sm font-bold text-green-400">{successCount}</span>
-                  <span className="text-[11px] text-neutral-400">bestået</span>
+                <div className="flex-1 text-center lg:text-left">
+                  <h1 id="score-heading" className="text-lg sm:text-xl font-bold mb-1 flex items-center justify-center lg:justify-start gap-2">
+                    <span>{cat.icon}</span> {cat.name}
+                  </h1>
+                  <p className="text-[11px] text-neutral-400 mb-3">
+                    {categoryIndex + 1} af {analysis.categories.length} kategorier · Samlet score: {analysis.overallScore}/100
+                  </p>
+                  <div className="flex flex-wrap justify-center lg:justify-start gap-2">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5">
+                      <span className="text-sm font-bold">{cat.findings.length}</span>
+                      <span className="text-[11px] text-neutral-400">fund</span>
+                    </div>
+                    {catErrors > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10">
+                        <span className="text-sm font-bold text-red-400">{catErrors}</span>
+                        <span className="text-[11px] text-neutral-400">kritiske</span>
+                      </div>
+                    )}
+                    {catWarnings > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10">
+                        <span className="text-sm font-bold text-yellow-400">{catWarnings}</span>
+                        <span className="text-[11px] text-neutral-400">advarsler</span>
+                      </div>
+                    )}
+                    {catSuccess > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10">
+                        <span className="text-sm font-bold text-green-400">{catSuccess}</span>
+                        <span className="text-[11px] text-neutral-400">bestået</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-
-            {screenshot && (
-              <div className="shrink-0 hidden xl:block">
-                <div className="w-48 rounded-lg overflow-hidden border border-white/10 shadow-2xl">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={screenshot}
-                    alt={`Screenshot af ${url}`}
-                    className="w-full"
-                    loading="lazy"
-                  />
+            </section>
+          );
+        })() : (
+          <section className="glass-card rounded-2xl p-5 sm:p-6 mb-6" aria-labelledby="score-heading">
+            <div className="flex flex-col lg:flex-row items-center gap-6">
+              <div className="flex flex-col items-center">
+                <ScoreRing score={analysis.overallScore} size={110} strokeWidth={8} />
+                <p className="mt-2 text-sm font-bold">{getScoreLabel(analysis.overallScore)}</p>
+                <p className="text-[11px] text-neutral-400 mt-0.5">Sidetype: {analysis.pageType}</p>
+              </div>
+              <div className="flex-1 text-center lg:text-left">
+                <h1 id="score-heading" className="text-lg sm:text-xl font-bold mb-2">CRO-analyserapport</h1>
+                <p className="text-neutral-300 text-sm leading-relaxed mb-4">{analysis.summary}</p>
+                <div className="flex flex-wrap justify-center lg:justify-start gap-2" role="list" aria-label="Analyse-statistik">
+                  <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5">
+                    <span className="text-sm font-bold">{totalFindings}</span>
+                    <span className="text-[11px] text-neutral-400">fund</span>
+                  </div>
+                  <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10">
+                    <span className="text-sm font-bold text-red-400">{errorCount}</span>
+                    <span className="text-[11px] text-neutral-400">kritiske</span>
+                  </div>
+                  <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10">
+                    <span className="text-sm font-bold text-yellow-400">{warningCount}</span>
+                    <span className="text-[11px] text-neutral-400">advarsler</span>
+                  </div>
+                  <div role="listitem" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10">
+                    <span className="text-sm font-bold text-green-400">{successCount}</span>
+                    <span className="text-[11px] text-neutral-400">bestået</span>
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
-        </section>
+              {screenshot && (
+                <div className="shrink-0 hidden xl:block">
+                  <div className="w-48 rounded-lg overflow-hidden border border-white/10 shadow-2xl">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={screenshot} alt={`Screenshot af ${url}`} className="w-full" loading="lazy" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Tab navigation */}
         <nav aria-label="Rapport-sektioner" className="flex gap-2 mb-8 overflow-x-auto pb-2">
