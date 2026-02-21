@@ -44,7 +44,7 @@ const HOW_IT_WORKS = [
 
 export default function HomePage() {
   return (
-    <main className="pt-16" id="main-content">
+    <main className="pt-20 sm:pt-24" id="main-content">
       {/* Hero */}
       <section className="relative min-h-[70vh] sm:min-h-[85vh] flex items-center justify-center px-4 sm:px-6 overflow-hidden" aria-labelledby="hero-heading">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[min(600px,100vw)] h-[600px] bg-orange-500/8 rounded-full blur-[120px] pointer-events-none" aria-hidden="true" />
