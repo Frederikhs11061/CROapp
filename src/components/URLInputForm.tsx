@@ -81,7 +81,7 @@ export default function URLInputForm() {
         </div>
       </div>
 
-      <fieldset className="flex items-center justify-center gap-4 mt-4 border-0">
+      <fieldset className="flex items-center justify-center gap-3 sm:gap-4 mt-3 sm:mt-4 border-0">
         <legend className="sr-only">Vælg enhedstype</legend>
         <button
           type="button"

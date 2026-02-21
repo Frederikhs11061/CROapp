@@ -58,7 +58,7 @@ export default function HomePage() {
   return (
     <main className="pt-16" id="main-content">
       {/* Hero */}
-      <section className="relative min-h-[85vh] flex items-center justify-center px-4 sm:px-6 overflow-hidden" aria-labelledby="hero-heading">
+      <section className="relative min-h-[70vh] sm:min-h-[85vh] flex items-center justify-center px-4 sm:px-6 overflow-hidden" aria-labelledby="hero-heading">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[min(600px,100vw)] h-[600px] bg-orange-500/8 rounded-full blur-[120px] pointer-events-none" aria-hidden="true" />
 
         <div className="relative z-10 w-full max-w-3xl mx-auto text-center">
@@ -73,7 +73,7 @@ export default function HomePage() {
             hjemmeside
           </h1>
 
-          <p className="text-base sm:text-lg lg:text-xl text-neutral-400 max-w-2xl mx-auto mb-8 sm:mb-12 leading-relaxed">
+          <p className="text-base sm:text-lg lg:text-xl text-neutral-400 max-w-2xl mx-auto mb-6 sm:mb-12 leading-relaxed">
             Indsæt din URL og få en komplet CRO-analyse på under 60 sekunder.
             Vi scanner dit site mod 400+ dokumenterede konverteringsprincipper
             og giver dig konkrete anbefalinger.
@@ -84,9 +84,9 @@ export default function HomePage() {
       </section>
 
       {/* How it works */}
-      <section className="py-16 sm:py-24 px-4 sm:px-6" aria-labelledby="how-heading">
+      <section className="py-10 sm:py-24 px-4 sm:px-6" aria-labelledby="how-heading">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-10 sm:mb-16">
+          <div className="text-center mb-6 sm:mb-16">
             <h2 id="how-heading" className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-4">
               Sådan virker det
             </h2>
@@ -118,9 +118,9 @@ export default function HomePage() {
       </section>
 
       {/* What we analyze */}
-      <section className="py-16 sm:py-24 px-4 sm:px-6 border-t border-white/5" aria-labelledby="analyze-heading">
+      <section className="py-10 sm:py-24 px-4 sm:px-6 border-t border-white/5" aria-labelledby="analyze-heading">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-10 sm:mb-16">
+          <div className="text-center mb-6 sm:mb-16">
             <h2 id="analyze-heading" className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-4">
               Hvad vi analyserer
             </h2>
