@@ -10,6 +10,11 @@ import {
   ListChecks,
   TrendingUp,
   Clock,
+  FlaskConical,
+  BarChart3,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
 } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import ScoreRing from "@/components/ScoreRing";
@@ -38,7 +43,7 @@ export default function ResultsClient() {
   const router = useRouter();
   const [data, setData] = useState<AnalysisData | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "overview" | "details" | "actions"
+    "overview" | "details" | "actions" | "ab-tests" | "benchmark"
   >("overview");
 
   useEffect(() => {
@@ -173,6 +178,8 @@ export default function ResultsClient() {
             { key: "overview" as const, icon: TrendingUp, label: "Overblik" },
             { key: "details" as const, icon: ListChecks, label: "Detaljeret analyse" },
             { key: "actions" as const, icon: Zap, label: "Quick Wins" },
+            { key: "ab-tests" as const, icon: FlaskConical, label: "A/B Test-idéer" },
+            { key: "benchmark" as const, icon: BarChart3, label: "Benchmark" },
           ]).map((tab) => (
             <button
               key={tab.key}
@@ -356,6 +363,196 @@ export default function ResultsClient() {
                     klaret!
                   </p>
                 )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* A/B Test Ideas */}
+        {activeTab === "ab-tests" && analysis.abTestIdeas && (
+          <div className="space-y-6">
+            <section className="glass-card rounded-2xl p-8" aria-labelledby="ab-heading">
+              <div className="flex items-center gap-3 mb-2">
+                <FlaskConical className="w-5 h-5 text-purple-400" aria-hidden="true" />
+                <h2 id="ab-heading" className="text-xl font-bold">
+                  A/B Test-idéer tilpasset din side
+                </h2>
+              </div>
+              <p className="text-neutral-400 text-sm mb-8">
+                Baseret på analysen af din {analysis.pageType} har vi udvalgt de mest relevante A/B tests.
+                Hver test inkluderer en hypotese, hvad du skal teste, og hvilken metrik du bør måle.
+              </p>
+
+              <div className="space-y-4">
+                {analysis.abTestIdeas.map((test) => (
+                  <article
+                    key={test.id}
+                    className="p-6 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-purple-500/20 transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0 text-sm font-bold text-purple-400">
+                          {test.id}
+                        </div>
+                        <h3 className="font-semibold">{test.title}</h3>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium shrink-0 ${
+                        test.expectedImpact === "high"
+                          ? "bg-green-500/15 text-green-400"
+                          : test.expectedImpact === "medium"
+                          ? "bg-yellow-500/15 text-yellow-400"
+                          : "bg-neutral-500/15 text-neutral-400"
+                      }`}>
+                        {test.expectedImpact === "high" ? "Høj" : test.expectedImpact === "medium" ? "Medium" : "Lav"} impact
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-neutral-300 mb-4 italic">
+                      &ldquo;{test.hypothesis}&rdquo;
+                    </p>
+
+                    <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                      <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/10">
+                        <div className="text-xs text-red-400 font-medium mb-1">Variant A (kontrol)</div>
+                        <p className="text-sm text-neutral-300">{test.variantA}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/10">
+                        <div className="text-xs text-green-400 font-medium mb-1">Variant B (test)</div>
+                        <p className="text-sm text-neutral-300">{test.variantB}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs text-neutral-500">
+                      <span>Mål: <span className="text-neutral-300">{test.metric}</span></span>
+                      <span className="text-white/10">|</span>
+                      <span>Kategori: <span className="text-neutral-300">{test.category}</span></span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <div className="mt-8 p-5 rounded-xl bg-purple-500/5 border border-purple-500/10">
+                <h3 className="font-semibold text-sm mb-2 text-purple-300">Sådan bruger du disse test-idéer</h3>
+                <ol className="text-sm text-neutral-400 space-y-1.5 list-decimal list-inside">
+                  <li>Vælg 1-2 tests med høj impact at starte med</li>
+                  <li>Kør hver test i minimum 2-4 uger eller indtil statistisk signifikans</li>
+                  <li>Mål kun den specificerede metrik for at undgå falske positiver</li>
+                  <li>Implementer vinderen og gå videre til næste test</li>
+                  <li>Test aldrig mere end 1 element ad gangen for klare resultater</li>
+                </ol>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* Benchmark */}
+        {activeTab === "benchmark" && analysis.benchmark && (
+          <div className="space-y-6">
+            <section className="glass-card rounded-2xl p-8" aria-labelledby="bench-heading">
+              <div className="flex items-center gap-3 mb-2">
+                <BarChart3 className="w-5 h-5 text-cyan-400" aria-hidden="true" />
+                <h2 id="bench-heading" className="text-xl font-bold">
+                  Competitor Benchmarking
+                </h2>
+              </div>
+              <p className="text-neutral-400 text-sm mb-4">
+                Sammenlign din sides performance mod branchegennemsnit og top-performere.
+              </p>
+
+              <div className="p-5 rounded-xl bg-cyan-500/5 border border-cyan-500/10 mb-8">
+                <div className="flex items-center gap-2 mb-2">
+                  <BarChart3 className="w-4 h-4 text-cyan-400" aria-hidden="true" />
+                  <span className="font-semibold text-sm">Din position</span>
+                </div>
+                <p className="text-neutral-200">{analysis.benchmark.overallPosition}</p>
+                <p className="text-sm text-neutral-400 mt-2">{analysis.benchmark.industryContext}</p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left py-3 px-4 text-neutral-400 font-medium">Kategori</th>
+                      <th className="text-center py-3 px-4 text-neutral-400 font-medium">Din score</th>
+                      <th className="text-center py-3 px-4 text-neutral-400 font-medium">Branchegennemsnit</th>
+                      <th className="text-center py-3 px-4 text-neutral-400 font-medium">Top 10%</th>
+                      <th className="text-center py-3 px-4 text-neutral-400 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analysis.benchmark.comparisons.map((comp) => (
+                      <tr key={comp.metric} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3 px-4 font-medium">{comp.metric}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`font-bold ${
+                            comp.status === "above" ? "text-green-400" : comp.status === "at" ? "text-yellow-400" : "text-red-400"
+                          }`}>
+                            {comp.yourValue}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center text-neutral-400">{comp.industryAvg}</td>
+                        <td className="py-3 px-4 text-center text-neutral-400">{comp.topPerformers}</td>
+                        <td className="py-3 px-4 text-center">
+                          {comp.status === "above" ? (
+                            <span className="inline-flex items-center gap-1 text-green-400 text-xs font-medium">
+                              <ArrowUpRight className="w-3 h-3" />
+                              Over
+                            </span>
+                          ) : comp.status === "at" ? (
+                            <span className="inline-flex items-center gap-1 text-yellow-400 text-xs font-medium">
+                              <Minus className="w-3 h-3" />
+                              Gennemsnit
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-red-400 text-xs font-medium">
+                              <ArrowDownRight className="w-3 h-3" />
+                              Under
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {analysis.benchmark.comparisons.filter((c) => c.recommendation).length > 0 && (
+                <div className="mt-8 space-y-3">
+                  <h3 className="font-semibold text-sm text-red-300">Områder under branchegennemsnit</h3>
+                  {analysis.benchmark.comparisons
+                    .filter((c) => c.recommendation)
+                    .map((comp) => (
+                      <div key={comp.metric} className="p-4 rounded-xl bg-red-500/5 border border-red-500/10">
+                        <p className="text-sm text-neutral-300">{comp.recommendation}</p>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </section>
+
+            <section className="glass-card rounded-2xl p-8" aria-labelledby="bench-insights-heading">
+              <h2 id="bench-insights-heading" className="text-lg font-bold mb-4">
+                Benchmark-indsigter
+              </h2>
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div className="p-5 rounded-xl bg-green-500/5 border border-green-500/10 text-center">
+                  <div className="text-3xl font-bold text-green-400">
+                    {analysis.benchmark.comparisons.filter((c) => c.status === "above").length}
+                  </div>
+                  <div className="text-sm text-neutral-400 mt-1">Over gennemsnit</div>
+                </div>
+                <div className="p-5 rounded-xl bg-yellow-500/5 border border-yellow-500/10 text-center">
+                  <div className="text-3xl font-bold text-yellow-400">
+                    {analysis.benchmark.comparisons.filter((c) => c.status === "at").length}
+                  </div>
+                  <div className="text-sm text-neutral-400 mt-1">På gennemsnit</div>
+                </div>
+                <div className="p-5 rounded-xl bg-red-500/5 border border-red-500/10 text-center">
+                  <div className="text-3xl font-bold text-red-400">
+                    {analysis.benchmark.comparisons.filter((c) => c.status === "below").length}
+                  </div>
+                  <div className="text-sm text-neutral-400 mt-1">Under gennemsnit</div>
+                </div>
               </div>
             </section>
           </div>

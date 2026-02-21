@@ -32,6 +32,33 @@ export type QuickWin = {
   estimatedImpact: string;
 };
 
+export type ABTestIdea = {
+  id: number;
+  title: string;
+  hypothesis: string;
+  variantA: string;
+  variantB: string;
+  metric: string;
+  expectedImpact: "high" | "medium" | "low";
+  category: string;
+  pageTypes: string[];
+};
+
+export type BenchmarkComparison = {
+  metric: string;
+  yourValue: number | string;
+  industryAvg: number | string;
+  topPerformers: number | string;
+  status: "above" | "at" | "below";
+  recommendation?: string;
+};
+
+export type BenchmarkData = {
+  overallPosition: string;
+  comparisons: BenchmarkComparison[];
+  industryContext: string;
+};
+
 export type AnalysisResult = {
   overallScore: number;
   pageType: string;
@@ -39,4 +66,6 @@ export type AnalysisResult = {
   categories: Category[];
   quickWins: QuickWin[];
   prioritizedActions: string[];
+  abTestIdeas: ABTestIdea[];
+  benchmark: BenchmarkData;
 };

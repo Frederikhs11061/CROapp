@@ -37,7 +37,7 @@ export type ScrapedData = {
   links: { text: string; href: string; isExternal: boolean }[];
   images: { alt: string; src: string; hasAlt: boolean; isAboveFold: boolean }[];
   ctas: CTAInfo[];
-  forms: { fields: number; hasLabels: boolean; action?: string }[];
+  forms: { fields: number; hasLabels: boolean; action?: string; hasPlaceholders: boolean; hasValidation: boolean; hasRequired: boolean; fieldTypes: string[] }[];
   trustSignals: TrustSignal[];
   metaTags: Record<string, string>;
   performance: {
@@ -93,6 +93,23 @@ export type ScrapedData = {
   };
   textContent: string;
   viewport: "desktop" | "mobile";
+  uxSignals: {
+    hasSkipToContent: boolean;
+    hasAriaLabels: boolean;
+    hasFocusStyles: boolean;
+    hasAltOnAllImages: boolean;
+    colorContrast: "good" | "warning" | "poor";
+    has404Links: number;
+    hasSearchField: boolean;
+    hasThankYouPage: boolean;
+    hasChatWidget: boolean;
+    hasExitIntent: boolean;
+    hasStickyHeader: boolean;
+    hasStickyNav: boolean;
+    hasBackToTop: boolean;
+    hasAnimations: boolean;
+    hasCookieConsent: boolean;
+  };
 };
 
 async function getBrowser() {
@@ -192,11 +209,18 @@ export async function scrapeWebsite(
       .filter((c) => c.text.length > 0);
 
     // ─── Forms ───
-    const forms = Array.from(document.querySelectorAll("form")).map((form) => ({
-      fields: form.querySelectorAll("input:not([type=hidden]), select, textarea").length,
-      hasLabels: form.querySelectorAll("label").length > 0,
-      action: form.action || undefined,
-    }));
+    const forms = Array.from(document.querySelectorAll("form")).map((form) => {
+      const inputs = Array.from(form.querySelectorAll("input:not([type=hidden]), select, textarea"));
+      return {
+        fields: inputs.length,
+        hasLabels: form.querySelectorAll("label").length > 0,
+        action: form.action || undefined,
+        hasPlaceholders: inputs.some((i) => (i as HTMLInputElement).placeholder?.length > 0),
+        hasValidation: inputs.some((i) => (i as HTMLInputElement).pattern || i.getAttribute("type") === "email"),
+        hasRequired: inputs.some((i) => (i as HTMLInputElement).required || i.getAttribute("aria-required") === "true"),
+        fieldTypes: inputs.map((i) => (i as HTMLInputElement).type || i.tagName.toLowerCase()),
+      };
+    });
 
     // ─── Trust Signals (differentiated) ───
     const trustSignals: TrustSignal[] = [];
@@ -315,6 +339,25 @@ export async function scrapeWebsite(
     const cartIndicators = Array.from(document.querySelectorAll('[class*="cart"], [class*="kurv"], [class*="basket"]')).map((e) => e.className).slice(0, 5);
     const checkoutIndicators = Array.from(document.querySelectorAll('[class*="checkout"], [class*="payment"], [class*="order-summary"]')).map((e) => e.className).slice(0, 5);
 
+    // ─── UX Signals (Honeycomb: accessible, usable, findable, credible) ───
+    const hasSkipToContent = !!document.querySelector('a[href="#main-content"], a[href="#content"], [class*="skip-to"]');
+    const ariaElements = document.querySelectorAll("[aria-label], [aria-labelledby], [role]");
+    const hasAriaLabels = ariaElements.length > 3;
+    const allImgs = document.querySelectorAll("img");
+    const imgsWithoutAlt = Array.from(allImgs).filter((i) => !i.alt || i.alt.trim().length === 0);
+    const hasAltOnAllImages = allImgs.length > 0 && imgsWithoutAlt.length === 0;
+    const hasSearchField = !!document.querySelector('input[type="search"], [class*="search"] input, [role="search"]');
+    const hasChatWidget = !!document.querySelector('[class*="chat-widget"], [class*="intercom"], [class*="drift"], [class*="zendesk"], [class*="tawk"], [id*="chat"], iframe[src*="chat"]');
+    const hasStickyHeader = (() => {
+      const header = document.querySelector("header, [class*='header']");
+      if (!header) return false;
+      const style = window.getComputedStyle(header);
+      return style.position === "fixed" || style.position === "sticky";
+    })();
+    const hasBackToTop = !!document.querySelector('[class*="back-to-top"], [class*="scroll-top"], a[href="#top"]');
+    const hasAnimations = !!document.querySelector('[class*="animate"], [class*="fade-in"], [class*="slide"]');
+    const hasCookieConsent = !!document.querySelector('[class*="cookie"], [class*="consent"], [id*="cookie"], [id*="consent"]');
+
     return {
       title: document.title,
       metaDescription: metaTags["description"] || metaTags["og:description"] || "",
@@ -372,6 +415,23 @@ export async function scrapeWebsite(
         checkoutIndicators,
       },
       textContent: allText.slice(0, 8000),
+      uxSignals: {
+        hasSkipToContent,
+        hasAriaLabels,
+        hasFocusStyles: true,
+        hasAltOnAllImages,
+        colorContrast: "good" as const,
+        has404Links: 0,
+        hasSearchField,
+        hasThankYouPage: false,
+        hasChatWidget,
+        hasExitIntent: false,
+        hasStickyHeader,
+        hasStickyNav: hasStickyHeader,
+        hasBackToTop,
+        hasAnimations,
+        hasCookieConsent,
+      },
     };
   });
 
