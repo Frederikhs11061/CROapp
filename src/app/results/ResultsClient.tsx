@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   ArrowLeft,
   ExternalLink,
   Zap,
-  ListChecks,
   TrendingUp,
   Clock,
   FlaskConical,
@@ -46,10 +45,9 @@ export default function ResultsClient() {
   const router = useRouter();
   const [data, setData] = useState<AnalysisData | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "overview" | "details" | "actions" | "ab-tests" | "benchmark"
+    "overview" | "category" | "actions" | "ab-tests" | "benchmark"
   >("overview");
-  const [focusedCategory, setFocusedCategory] = useState<string | null>(null);
-  const scrolledRef = useRef(false);
+  const [categoryIndex, setCategoryIndex] = useState(0);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("cro-analysis");
@@ -59,19 +57,6 @@ export default function ResultsClient() {
     }
     setData(JSON.parse(stored));
   }, [router]);
-
-  useEffect(() => {
-    if (activeTab === "details" && focusedCategory && !scrolledRef.current) {
-      scrolledRef.current = true;
-      const id = `cat-${focusedCategory.replace(/\s+/g, "-")}`;
-      requestAnimationFrame(() => {
-        document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    }
-    if (activeTab !== "details") {
-      scrolledRef.current = false;
-    }
-  }, [activeTab, focusedCategory]);
 
   if (!data) return null;
 
@@ -194,7 +179,6 @@ export default function ResultsClient() {
         <nav aria-label="Rapport-sektioner" className="flex gap-2 mb-8 overflow-x-auto pb-2">
           {([
             { key: "overview" as const, icon: TrendingUp, label: "Overblik" },
-            { key: "details" as const, icon: ListChecks, label: "Detaljeret analyse" },
             { key: "actions" as const, icon: Zap, label: "Quick Wins" },
             { key: "ab-tests" as const, icon: FlaskConical, label: "A/B Test-idéer" },
             { key: "benchmark" as const, icon: BarChart3, label: "Benchmark" },
@@ -253,7 +237,7 @@ export default function ResultsClient() {
                     <article
                       key={cat.name}
                       className="glass-card rounded-xl p-5 flex items-center gap-4 cursor-pointer hover:border-orange-500/20 transition-all group"
-                      onClick={() => { setFocusedCategory(cat.name); setActiveTab("details"); }}
+                      onClick={() => { setCategoryIndex(analysis.categories.indexOf(cat)); setActiveTab("category"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
                     >
                       <ScoreRing score={cat.score} size={56} strokeWidth={4} />
                       <div className="flex-1 min-w-0">
@@ -315,31 +299,59 @@ export default function ResultsClient() {
           </div>
         )}
 
-        {/* Details */}
-        {activeTab === "details" && (
-          <div className="space-y-6">
-            {focusedCategory && (
-              <button
-                onClick={() => { setFocusedCategory(null); setActiveTab("overview"); }}
-                className="flex items-center gap-2 text-xs text-neutral-400 hover:text-white transition-colors mb-2"
-              >
-                <ArrowLeft className="w-3 h-3" />
-                Tilbage til overblik
-              </button>
-            )}
-            {analysis.categories.map((cat) => (
-              <div
-                key={cat.name}
-                id={`cat-${cat.name.replace(/\s+/g, "-")}`}
-                className={`scroll-mt-24 rounded-2xl transition-all ${
-                  focusedCategory === cat.name ? "ring-1 ring-orange-500/30" : ""
-                }`}
-              >
-                <CategorySection category={cat} />
+        {/* Single category detail view */}
+        {activeTab === "category" && (() => {
+          const cat = analysis.categories[categoryIndex];
+          if (!cat) return null;
+          const prev = categoryIndex > 0 ? analysis.categories[categoryIndex - 1] : null;
+          const next = categoryIndex < analysis.categories.length - 1 ? analysis.categories[categoryIndex + 1] : null;
+
+          return (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setActiveTab("overview")}
+                  className="flex items-center gap-2 text-xs text-neutral-400 hover:text-white transition-colors"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  Tilbage til overblik
+                </button>
+                <span className="text-xs text-neutral-500">
+                  {categoryIndex + 1} af {analysis.categories.length}
+                </span>
               </div>
-            ))}
-          </div>
-        )}
+
+              <CategorySection category={cat} />
+
+              <div className="flex items-center justify-between gap-4">
+                {prev ? (
+                  <button
+                    onClick={() => { setCategoryIndex(categoryIndex - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl glass-card hover:border-orange-500/20 transition-all text-sm group"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-neutral-500 group-hover:text-orange-400 transition-colors" />
+                    <div className="text-left">
+                      <div className="text-[10px] text-neutral-500">Forrige</div>
+                      <div className="text-xs font-medium">{prev.icon} {prev.name}</div>
+                    </div>
+                  </button>
+                ) : <div />}
+                {next ? (
+                  <button
+                    onClick={() => { setCategoryIndex(categoryIndex + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl glass-card hover:border-orange-500/20 transition-all text-sm group"
+                  >
+                    <div className="text-right">
+                      <div className="text-[10px] text-neutral-500">Næste</div>
+                      <div className="text-xs font-medium">{next.icon} {next.name}</div>
+                    </div>
+                    <ArrowUpRight className="w-4 h-4 text-neutral-500 group-hover:text-orange-400 transition-colors" />
+                  </button>
+                ) : <div />}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Quick Wins */}
         {activeTab === "actions" && (
