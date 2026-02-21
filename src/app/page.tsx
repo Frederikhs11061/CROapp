@@ -89,7 +89,7 @@ export default function HomePage() {
                 key={item.step}
                 className="glass-card rounded-2xl p-5 sm:p-8 relative group hover:border-orange-500/20 transition-all"
               >
-                <span className="absolute top-4 right-4 sm:top-6 sm:right-6 text-4xl sm:text-6xl font-black text-orange-500/15" aria-hidden="true">
+                <span className="absolute top-4 right-4 sm:top-6 sm:right-6 text-4xl sm:text-6xl font-black text-orange-500/30" aria-hidden="true">
                   {item.step}
                 </span>
                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-orange-500/10 flex items-center justify-center mb-4 sm:mb-5">
