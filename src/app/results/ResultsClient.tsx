@@ -338,48 +338,37 @@ export default function ResultsClient() {
           const next = categoryIndex < analysis.categories.length - 1 ? analysis.categories[categoryIndex + 1] : null;
 
           return (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => setActiveTab("overview")}
-                  className="flex items-center gap-2 text-xs text-neutral-400 hover:text-white transition-colors"
-                >
-                  <ArrowLeft className="w-3 h-3" />
-                  Tilbage til overblik
-                </button>
-                <span className="text-xs text-neutral-500">
-                  {categoryIndex + 1} af {analysis.categories.length}
-                </span>
-              </div>
+            <div className="space-y-4">
+              <button
+                onClick={() => setActiveTab("overview")}
+                className="flex items-center gap-2 text-xs text-neutral-400 hover:text-white transition-colors"
+              >
+                <ArrowLeft className="w-3 h-3" />
+                Tilbage til overblik
+              </button>
+
+              <nav className="flex gap-1.5 overflow-x-auto pb-2 -mx-1 px-1" aria-label="Kategorier">
+                {analysis.categories.map((c, i) => (
+                  <button
+                    key={c.name}
+                    onClick={() => { setCategoryIndex(i); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
+                      i === categoryIndex
+                        ? "bg-orange-500/15 text-orange-400 border border-orange-500/30"
+                        : "text-neutral-500 hover:text-white hover:bg-white/5 border border-transparent"
+                    }`}
+                  >
+                    <span className="text-[11px]">{c.icon}</span>
+                    <span className="hidden sm:inline">{c.name}</span>
+                    <span className="sm:hidden">{c.name.split(" ")[0]}</span>
+                    <span className={`text-[10px] ml-0.5 ${
+                      i === categoryIndex ? "text-orange-400/70" : "text-neutral-600"
+                    }`}>{c.score}</span>
+                  </button>
+                ))}
+              </nav>
 
               <CategorySection category={cat} />
-
-              <div className="flex items-center justify-between gap-4">
-                {prev ? (
-                  <button
-                    onClick={() => { setCategoryIndex(categoryIndex - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl glass-card hover:border-orange-500/20 transition-all text-sm group"
-                  >
-                    <ArrowLeft className="w-4 h-4 text-neutral-500 group-hover:text-orange-400 transition-colors" />
-                    <div className="text-left">
-                      <div className="text-[10px] text-neutral-500">Forrige</div>
-                      <div className="text-xs font-medium">{prev.icon} {prev.name}</div>
-                    </div>
-                  </button>
-                ) : <div />}
-                {next ? (
-                  <button
-                    onClick={() => { setCategoryIndex(categoryIndex + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl glass-card hover:border-orange-500/20 transition-all text-sm group"
-                  >
-                    <div className="text-right">
-                      <div className="text-[10px] text-neutral-500">Næste</div>
-                      <div className="text-xs font-medium">{next.icon} {next.name}</div>
-                    </div>
-                    <ArrowUpRight className="w-4 h-4 text-neutral-500 group-hover:text-orange-400 transition-colors" />
-                  </button>
-                ) : <div />}
-              </div>
             </div>
           );
         })()}
