@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scrapeWebsite } from "@/lib/scraper";
-import { analyzeWithAI } from "@/lib/analyzer";
+import { analyzeWebsite } from "@/lib/analyzer";
 
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     const scrapedData = await scrapeWebsite(parsedUrl.toString(), viewport);
 
-    const analysis = await analyzeWithAI(scrapedData);
+    const analysis = analyzeWebsite(scrapedData);
 
     return NextResponse.json({
       success: true,
