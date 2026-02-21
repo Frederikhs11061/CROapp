@@ -229,79 +229,86 @@ export default function ResultsClient() {
               </section>
             )}
 
-            {/* Category menu */}
+            {/* Category grid (clickable cards) */}
             <section aria-label="Kategori-scores">
-              <div className="space-y-2">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {analysis.categories.map((cat) => {
-                  const isExpanded = expandedCategory === cat.name;
-                  const errors = cat.findings.filter((fi) => fi.type === "error");
-                  const warnings = cat.findings.filter((fi) => fi.type === "warning");
-                  const successes = cat.findings.filter((fi) => fi.type === "success");
+                  const errors = cat.findings.filter((fi) => fi.type === "error").length;
+                  const warnings = cat.findings.filter((fi) => fi.type === "warning").length;
 
                   return (
-                    <div key={cat.name} className="glass-card rounded-xl overflow-hidden">
-                      <button
-                        onClick={() => setExpandedCategory(isExpanded ? null : cat.name)}
-                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
-                      >
-                        <ScoreRing score={cat.score} size={36} strokeWidth={3} />
-                        <span className="text-xs" aria-hidden="true">{cat.icon}</span>
-                        <span className="text-xs font-semibold flex-1 text-left">{cat.name}</span>
-                        <div className="flex items-center gap-2 mr-2">
-                          {errors.length > 0 && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-red-400">
-                              <XCircle className="w-3 h-3" />{errors.length}
-                            </span>
-                          )}
-                          {warnings.length > 0 && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-yellow-400">
-                              <AlertTriangle className="w-3 h-3" />{warnings.length}
-                            </span>
-                          )}
-                          {successes.length > 0 && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-green-400">
-                              <CheckCircle2 className="w-3 h-3" />{successes.length}
-                            </span>
-                          )}
+                    <article
+                      key={cat.name}
+                      className={`glass-card rounded-xl p-5 flex items-center gap-4 cursor-pointer transition-all ${
+                        expandedCategory === cat.name
+                          ? "border-orange-500/30 bg-white/[0.03]"
+                          : "hover:border-orange-500/20"
+                      }`}
+                      onClick={() => setExpandedCategory(expandedCategory === cat.name ? null : cat.name)}
+                    >
+                      <ScoreRing score={cat.score} size={56} strokeWidth={4} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span aria-hidden="true">{cat.icon}</span>
+                          <h3 className="font-semibold text-sm">{cat.name}</h3>
                         </div>
-                        <ChevronDown className={`w-3.5 h-3.5 text-neutral-500 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                      </button>
-
-                      {isExpanded && (
-                        <div className="px-4 pb-4 pt-1 border-t border-white/5 space-y-2">
-                          {cat.findings.map((fi, idx) => (
-                            <div
-                              key={idx}
-                              className={`p-3 rounded-lg text-xs ${
-                                fi.type === "error"
-                                  ? "bg-red-500/5 border border-red-500/10"
-                                  : fi.type === "warning"
-                                  ? "bg-yellow-500/5 border border-yellow-500/10"
-                                  : "bg-green-500/5 border border-green-500/10"
-                              }`}
-                            >
-                              <div className="flex items-center gap-1.5 mb-1">
-                                {fi.type === "error" && <XCircle className="w-3 h-3 text-red-400 shrink-0" />}
-                                {fi.type === "warning" && <AlertTriangle className="w-3 h-3 text-yellow-400 shrink-0" />}
-                                {fi.type === "success" && <CheckCircle2 className="w-3 h-3 text-green-400 shrink-0" />}
-                                <span className="font-semibold">{fi.title}</span>
-                                <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${
-                                  fi.impact === "high" ? "bg-red-500/10 text-red-400" : fi.impact === "medium" ? "bg-yellow-500/10 text-yellow-400" : "bg-neutral-500/10 text-neutral-400"
-                                }`}>{fi.impact}</span>
-                              </div>
-                              <p className="text-neutral-400 mb-1.5 leading-relaxed">{fi.description}</p>
-                              {fi.recommendation && (
-                                <p className="text-orange-300/90 leading-relaxed">→ {fi.recommendation}</p>
-                              )}
-                            </div>
-                          ))}
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-neutral-500">{cat.findings.length} fund</span>
+                          {errors > 0 && <span className="text-[10px] text-red-400">{errors} fejl</span>}
+                          {warnings > 0 && <span className="text-[10px] text-yellow-400">{warnings} advarsler</span>}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                      <ChevronDown className={`w-4 h-4 text-neutral-500 shrink-0 transition-transform ${expandedCategory === cat.name ? "rotate-180" : ""}`} />
+                    </article>
                   );
                 })}
               </div>
             </section>
+
+            {/* Expanded category detail */}
+            {expandedCategory && (() => {
+              const cat = analysis.categories.find((c) => c.name === expandedCategory);
+              if (!cat) return null;
+              return (
+                <section className="glass-card rounded-2xl p-6" aria-label={`Detaljer for ${cat.name}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-bold flex items-center gap-2">
+                      <span aria-hidden="true">{cat.icon}</span>
+                      {cat.name} – {cat.findings.length} fund
+                    </h2>
+                    <button onClick={() => setExpandedCategory(null)} className="text-xs text-neutral-500 hover:text-white transition-colors">Luk</button>
+                  </div>
+                  <div className="space-y-2">
+                    {cat.findings.map((fi, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-3 rounded-lg text-xs ${
+                          fi.type === "error"
+                            ? "bg-red-500/5 border border-red-500/10"
+                            : fi.type === "warning"
+                            ? "bg-yellow-500/5 border border-yellow-500/10"
+                            : "bg-green-500/5 border border-green-500/10"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 mb-1">
+                          {fi.type === "error" && <XCircle className="w-3 h-3 text-red-400 shrink-0" />}
+                          {fi.type === "warning" && <AlertTriangle className="w-3 h-3 text-yellow-400 shrink-0" />}
+                          {fi.type === "success" && <CheckCircle2 className="w-3 h-3 text-green-400 shrink-0" />}
+                          <span className="font-semibold">{fi.title}</span>
+                          <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${
+                            fi.impact === "high" ? "bg-red-500/10 text-red-400" : fi.impact === "medium" ? "bg-yellow-500/10 text-yellow-400" : "bg-neutral-500/10 text-neutral-400"
+                          }`}>{fi.impact}</span>
+                        </div>
+                        <p className="text-neutral-400 mb-1.5 leading-relaxed">{fi.description}</p>
+                        {fi.recommendation && (
+                          <p className="text-orange-300/90 leading-relaxed">→ {fi.recommendation}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })()}
 
             <section className="glass-card rounded-xl p-5" aria-labelledby="actions-heading">
               <h2 id="actions-heading" className="text-sm font-bold mb-4 flex items-center gap-2">
