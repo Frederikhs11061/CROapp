@@ -355,14 +355,13 @@ export default function ResultsClient() {
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
                       i === categoryIndex
                         ? "bg-orange-500/15 text-orange-400 border border-orange-500/30"
-                        : "text-neutral-500 hover:text-white hover:bg-white/5 border border-transparent"
+                        : "text-neutral-300 hover:text-white hover:bg-white/5 border border-white/5 bg-white/[0.02]"
                     }`}
                   >
                     <span className="text-[11px]">{c.icon}</span>
-                    <span className="hidden sm:inline">{c.name}</span>
-                    <span className="sm:hidden">{c.name.split(" ")[0]}</span>
+                    <span>{c.name}</span>
                     <span className={`text-[10px] ml-0.5 ${
-                      i === categoryIndex ? "text-orange-400/70" : "text-neutral-600"
+                      i === categoryIndex ? "text-orange-400/70" : "text-neutral-500"
                     }`}>{c.score}</span>
                   </button>
                 ))}
