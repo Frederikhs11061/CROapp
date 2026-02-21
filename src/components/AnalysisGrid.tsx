@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   Eye,
   Target,
@@ -195,15 +195,14 @@ export default function AnalysisGrid() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4" role="list">
-        {ITEMS.map((item) => {
-          const isOpen = expanded === item.label;
-          const Icon = item.iconKey ? ICON_MAP[item.iconKey] : null;
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4" role="list">
+      {ITEMS.map((item) => {
+        const isOpen = expanded === item.label;
+        const Icon = item.iconKey ? ICON_MAP[item.iconKey] : null;
 
-          return (
+        return (
+          <React.Fragment key={item.label}>
             <button
-              key={item.label}
               role="listitem"
               onClick={() => setExpanded(isOpen ? null : item.label)}
               className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl glass-card transition-all text-left w-full ${
@@ -223,65 +222,60 @@ export default function AnalysisGrid() {
               </div>
               <ChevronDown className={`w-3.5 h-3.5 text-neutral-500 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
             </button>
-          );
-        })}
-      </div>
 
-      {expanded && (() => {
-        const item = ITEMS.find((i) => i.label === expanded);
-        if (!item) return null;
-
-        return (
-          <div className="mt-4 glass-card rounded-2xl p-5 sm:p-6 border border-orange-500/10 animate-in">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-orange-400 text-xs font-bold uppercase tracking-wider">Princip</span>
-                </div>
-                <h3 className="text-base sm:text-lg font-bold">{item.law}</h3>
-              </div>
-              <button
-                onClick={() => setExpanded(null)}
-                className="text-xs text-neutral-500 hover:text-white transition-colors shrink-0 pt-1"
-              >
-                Luk
-              </button>
-            </div>
-
-            <p className="text-sm text-neutral-300 leading-relaxed mb-5">{item.lawDesc}</p>
-
-            <div className="mb-5">
-              <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">Hvad vi tjekker</h4>
-              <ul className="space-y-1.5">
-                {item.principles.map((p, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-neutral-300">
-                    <span className="text-orange-400 mt-0.5 shrink-0">✓</span>
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">Kilder & læs mere</h4>
-              <div className="flex flex-wrap gap-2">
-                {item.sources.map((src) => (
-                  <a
-                    key={src.url}
-                    href={src.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-neutral-300 hover:text-orange-400 hover:border-orange-500/20 transition-all"
+            {isOpen && (
+              <div className="col-span-full glass-card rounded-2xl p-5 sm:p-6 border border-orange-500/10 animate-in">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-orange-400 text-xs font-bold uppercase tracking-wider">Princip</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-bold">{item.law}</h3>
+                  </div>
+                  <button
+                    onClick={() => setExpanded(null)}
+                    className="text-xs text-neutral-500 hover:text-white transition-colors shrink-0 pt-1"
                   >
-                    {src.label}
-                    <ExternalLink className="w-3 h-3 shrink-0" />
-                  </a>
-                ))}
+                    Luk
+                  </button>
+                </div>
+
+                <p className="text-sm text-neutral-300 leading-relaxed mb-5">{item.lawDesc}</p>
+
+                <div className="mb-5">
+                  <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">Hvad vi tjekker</h4>
+                  <ul className="space-y-1.5">
+                    {item.principles.map((p, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-neutral-300">
+                        <span className="text-orange-400 mt-0.5 shrink-0">✓</span>
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">Kilder & læs mere</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {item.sources.map((src) => (
+                      <a
+                        key={src.url}
+                        href={src.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-neutral-300 hover:text-orange-400 hover:border-orange-500/20 transition-all"
+                      >
+                        {src.label}
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            )}
+          </React.Fragment>
         );
-      })()}
-    </>
+      })}
+    </div>
   );
 }
