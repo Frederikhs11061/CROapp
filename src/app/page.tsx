@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import {
   Zap,
-  Shield,
   BarChart3,
   Target,
-  Eye,
   Brain,
 } from "lucide-react";
 import URLInputForm from "@/components/URLInputForm";
@@ -18,17 +16,7 @@ export const metadata: Metadata = {
   },
 };
 
-const ANALYSIS_ITEMS = [
-  { icon: Eye, label: "Above the Fold", desc: "Headlines, hero, første indtryk" },
-  { icon: Target, label: "Call to Action", desc: "Placering, kontrast, tekst" },
-  { icon: Shield, label: "Social Proof & Tillid", desc: "Reviews, badges, garantier" },
-  { emoji: "✍️", label: "Copywriting", desc: "Klarhed, benefits, USP" },
-  { emoji: "🧭", label: "Navigation", desc: "Struktur, hierarki, flow" },
-  { emoji: "🎨", label: "Design & UX", desc: "Layout, farver, typografi" },
-  { emoji: "📱", label: "Mobil & Speed", desc: "Responsivitet, load tid" },
-  { emoji: "💰", label: "Konvertering", desc: "Priser, urgency, scarcity" },
-  { emoji: "🚧", label: "Friktion", desc: "Barrierer, distraktioner" },
-] as const;
+import AnalysisGrid from "@/components/AnalysisGrid";
 
 const HOW_IT_WORKS = [
   {
@@ -129,27 +117,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" role="list">
-            {ANALYSIS_ITEMS.map((item) => (
-              <div
-                key={item.label}
-                role="listitem"
-                className="flex items-center gap-4 p-4 rounded-xl glass-card hover:border-orange-500/20 transition-all"
-              >
-                <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
-                  {"emoji" in item ? (
-                    <span className="text-lg" aria-hidden="true">{item.emoji}</span>
-                  ) : (
-                    <item.icon className="w-5 h-5 text-orange-400" aria-hidden="true" />
-                  )}
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">{item.label}</p>
-                  <p className="text-xs text-neutral-500">{item.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <AnalysisGrid />
         </div>
       </section>
     </main>
