@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { ArrowRight, Monitor, Smartphone, Globe } from "lucide-react";
+import { ArrowRight, Globe } from "lucide-react";
 
 const AnalysisLoader = dynamic(() => import("@/components/AnalysisLoader"), {
   ssr: false,
@@ -12,7 +12,6 @@ const AnalysisLoader = dynamic(() => import("@/components/AnalysisLoader"), {
 export default function URLInputForm() {
   const router = useRouter();
   const [url, setUrl] = useState("");
-  const [viewport, setViewport] = useState<"desktop" | "mobile">("desktop");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -27,7 +26,7 @@ export default function URLInputForm() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim(), viewport }),
+        body: JSON.stringify({ url: url.trim(), viewport: "desktop" }),
       });
 
       const data = await res.json();
@@ -80,36 +79,6 @@ export default function URLInputForm() {
           </button>
         </div>
       </div>
-
-      <fieldset className="flex items-center justify-center gap-3 sm:gap-4 mt-3 sm:mt-4 border-0">
-        <legend className="sr-only">Vælg enhedstype</legend>
-        <button
-          type="button"
-          onClick={() => setViewport("desktop")}
-          aria-pressed={viewport === "desktop"}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all ${
-            viewport === "desktop"
-              ? "bg-white/10 text-white border border-white/20"
-              : "text-neutral-500 hover:text-neutral-300"
-          }`}
-        >
-          <Monitor className="w-4 h-4" aria-hidden="true" />
-          Desktop
-        </button>
-        <button
-          type="button"
-          onClick={() => setViewport("mobile")}
-          aria-pressed={viewport === "mobile"}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all ${
-            viewport === "mobile"
-              ? "bg-white/10 text-white border border-white/20"
-              : "text-neutral-500 hover:text-neutral-300"
-          }`}
-        >
-          <Smartphone className="w-4 h-4" aria-hidden="true" />
-          Mobil
-        </button>
-      </fieldset>
 
       {error && (
         <div role="alert" className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
