@@ -2,7 +2,7 @@ import puppeteer from "puppeteer-core";
 import chromium from "@sparticuz/chromium-min";
 
 const CHROMIUM_PACK =
-  "https://github.com/Sparticuz/chromium/releases/download/v143.0.4/chromium-v143.0.4-pack.tar";
+  "https://github.com/Sparticuz/chromium/releases/download/v143.0.4/chromium-v143.0.4-pack.x64.tar";
 
 export type ScrapedData = {
   title: string;
