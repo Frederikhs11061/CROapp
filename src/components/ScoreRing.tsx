@@ -60,14 +60,19 @@ export default function ScoreRing({
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span
-            className="text-4xl font-black tabular-nums"
-            style={{ color: colors.stroke }}
+            className="font-black tabular-nums leading-none"
+            style={{ color: colors.stroke, fontSize: size * 0.28 }}
           >
             {animated}
           </span>
-          <span className="text-xs text-neutral-500 uppercase tracking-widest">
-            / 100
-          </span>
+          {size >= 60 && (
+            <span
+              className="text-neutral-500 uppercase tracking-wider leading-none"
+              style={{ fontSize: Math.max(8, size * 0.1) }}
+            >
+              / 100
+            </span>
+          )}
         </div>
       </div>
       {label && (
