@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { scrapeWebsite } from "@/lib/scraper";
+import { scrapeWebsite, fetchPageSpeed } from "@/lib/scraper";
 import { analyzeWebsite } from "@/lib/analyzer";
 
 export const maxDuration = 60;
@@ -15,23 +15,28 @@ export async function POST(request: NextRequest) {
 
     let parsedUrl: URL;
     try {
-      parsedUrl = new URL(
-        url.startsWith("http") ? url : `https://${url}`
-      );
+      parsedUrl = new URL(url.startsWith("http") ? url : `https://${url}`);
     } catch {
       return NextResponse.json({ error: "Ugyldig URL" }, { status: 400 });
     }
 
-    const scrapedData = await scrapeWebsite(parsedUrl.toString(), viewport);
+    const fullUrl = parsedUrl.toString();
 
-    const analysis = analyzeWebsite(scrapedData);
+    // Run scraping and PageSpeed in parallel
+    const [scrapedData, pageSpeed] = await Promise.all([
+      scrapeWebsite(fullUrl, viewport),
+      fetchPageSpeed(fullUrl, viewport === "mobile" ? "mobile" : "desktop"),
+    ]);
+
+    const analysis = analyzeWebsite(scrapedData, pageSpeed);
 
     return NextResponse.json({
       success: true,
       analysis,
       screenshot: scrapedData.screenshot,
-      url: parsedUrl.toString(),
+      url: fullUrl,
       scrapedAt: new Date().toISOString(),
+      pageSpeed,
     });
   } catch (error) {
     console.error("Analysis error:", error);

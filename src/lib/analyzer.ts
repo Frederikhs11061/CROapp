@@ -1,5 +1,15 @@
 import type { AnalysisResult, Finding, Category, QuickWin } from "./cro-knowledge";
-import type { ScrapedData } from "./scraper";
+import type { ScrapedData, PageSpeedData } from "./scraper";
+
+// ─── Types ──────────────────────────────────────────────────────
+
+type PageType = "forside" | "produktside" | "kollektionsside" | "kurv" | "checkout" | "landingsside" | "andet";
+
+type AnalysisContext = {
+  data: ScrapedData;
+  pageType: PageType;
+  pageSpeed: PageSpeedData | null;
+};
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -14,537 +24,730 @@ function f(
   return { type, title, description, recommendation, impact, law };
 }
 
-const ACTION_WORDS = [
-  "køb", "bestil", "tilføj", "start", "prøv", "hent", "få", "book",
-  "download", "tilmeld", "opret", "se", "shop", "buy", "add", "get",
-  "try", "order", "subscribe", "sign up", "call", "click", "learn",
-];
+// ─── Page Type Detection (v2 – much smarter) ───────────────────
 
-const URGENCY_WORDS = [
-  "nu", "i dag", "begrænset", "kun", "sidste", "snart", "udløber",
-  "skyndig", "hurtig", "limited", "today", "now", "only", "last",
-  "ending", "expires", "few left", "almost gone", "sold out",
-];
-
-const TRUST_WORDS = [
-  "garanti", "returret", "gratis fragt", "fri fragt", "sikker",
-  "pengene tilbage", "ombytning", "forsikring", "tryg", "ssl",
-  "krypteret", "guarantee", "free shipping", "money back", "secure",
-  "encrypted", "certified", "verified",
-];
-
-const BENEFIT_WORDS = [
-  "spar", "gratis", "hurtig", "nem", "billig", "bedste", "eksklusiv",
-  "populær", "anbefalet", "favorit", "save", "free", "fast", "easy",
-  "best", "exclusive", "popular", "recommended", "proven", "guaranteed",
-];
-
-function textContainsAny(text: string, words: string[]): string[] {
-  const lower = text.toLowerCase();
-  return words.filter((w) => lower.includes(w));
-}
-
-function detectPageType(data: ScrapedData): string {
-  const text = data.textContent.toLowerCase();
+function detectPageType(data: ScrapedData): PageType {
   const url = data.url.toLowerCase();
-  const hasAddToCart = data.ctas.some((c) =>
-    /tilføj|add to (cart|bag)|køb|buy|læg i kurv/i.test(c.text)
-  );
+  const path = new URL(data.url).pathname.toLowerCase();
+  const si = data.structuralInfo;
+  const ps = data.pageSignals;
 
-  if (/checkout|betal|payment|ordre/i.test(url + text)) return "checkout";
-  if (/cart|kurv|indkøb/i.test(url + text) && !hasAddToCart) return "kurv";
-  if (/collections?|kategori|kollektion/i.test(url)) return "kollektionsside";
-  if (hasAddToCart || /product|produkt/i.test(url)) return "produktside";
-  if (url.replace(/https?:\/\/[^/]+\/?$/, "") === "" || /^\/?$/.test(new URL(data.url).pathname))
-    return "forside";
-  return "landingsside";
+  // Checkout: checkout form, payment elements, progress indicator
+  if (si.hasCheckoutForm || ps.checkoutIndicators.length >= 2) {
+    if (/checkout|betal|payment|kasse/i.test(url)) return "checkout";
+  }
+
+  // Cart: cart-specific page (not just a cart icon in header)
+  if (/\/(cart|kurv|indkøbskurv|basket)\b/i.test(path)) return "kurv";
+
+  // Product page: add-to-cart + product gallery/schema, NOT a collection
+  if (si.hasAddToCart && (si.hasProductGallery || ps.hasProductSchema)) {
+    if (ps.productCount < 4) return "produktside";
+  }
+  if (/\/products\/[^/]+|\/produkt\//i.test(path)) return "produktside";
+
+  // Collection/category page: product grid with multiple products + filters
+  if (ps.productCount >= 4) return "kollektionsside";
+  if (si.hasFilters && ps.productCount >= 2) return "kollektionsside";
+  if (/\/collections?\/?|\/kategori|\/shop\/?$/i.test(path)) return "kollektionsside";
+
+  // Homepage: root path or very short path
+  if (/^\/?$/.test(path) || path === "/index" || path === "/index.html") return "forside";
+  if (path.split("/").filter(Boolean).length === 0) return "forside";
+
+  // Landing page: has hero, CTA, not clearly another type
+  if (si.hasHero && data.ctas.length > 0) return "landingsside";
+
+  return "forside";
 }
 
-// ─── Category analyzers ─────────────────────────────────────────
+// ─── Category Analyzers (context-aware) ─────────────────────────
 
-function analyzeAboveTheFold(data: ScrapedData): Category {
+function analyzeAboveTheFold(ctx: AnalysisContext): Category {
+  const { data, pageType } = ctx;
   const findings: Finding[] = [];
   const h1s = data.headings.filter((h) => h.tag === "h1");
+  const aboveFoldH1 = h1s.filter((h) => h.isAboveFold);
 
+  // H1 check (all page types)
   if (h1s.length === 0) {
-    findings.push(f("error", "Manglende H1-overskrift", "Siden har ingen H1-overskrift, hvilket er kritisk for både SEO og konvertering. Besøgende ved ikke med det samme hvad siden handler om.", "Tilføj en klar, benefit-orienteret H1-overskrift above the fold der kommunikerer dit værditilbud.", "high", "Klarhedslov"));
+    findings.push(f("error", "Manglende H1-overskrift",
+      "Siden har ingen H1-overskrift. Det er kritisk for SEO og for at kommunikere sidens formål.",
+      "Tilføj en klar H1 der kommunikerer det primære budskab. F.eks. for en forside: 'Danmarks bedste [produkt] – Fri fragt over 499 kr'.",
+      "high", "Klarhedslov"));
   } else if (h1s.length > 1) {
-    findings.push(f("warning", "Flere H1-overskrifter", `Siden har ${h1s.length} H1-overskrifter. Det skaber forvirring om hierarkiet.`, "Behold kun én H1 der kommunikerer det primære værditilbud. Konvertér resten til H2.", "medium", "Klarhedslov"));
-  } else {
-    const h1Text = h1s[0].text;
-    const hasBenefitWords = textContainsAny(h1Text, BENEFIT_WORDS).length > 0;
-    if (hasBenefitWords) {
-      findings.push(f("success", "Benefit-orienteret H1", `H1 "${h1Text.slice(0, 60)}..." indeholder benefit-ord der appellerer til besøgende.`, "", "high", "Maksimeringsloven"));
+    findings.push(f("warning", `${h1s.length} H1-overskrifter`,
+      `Siden har ${h1s.length} H1'er. Google og besøgende forventer én klar H1 per side.`,
+      `Behold kun den vigtigste H1 ("${h1s[0].text.slice(0, 50)}...") og konvertér resten til H2.`,
+      "medium", "Klarhedslov"));
+  }
+
+  // Value proposition (homepage + landing page)
+  if (["forside", "landingsside"].includes(pageType)) {
+    const heroText = data.firstScreenContent.heroText;
+    if (!heroText) {
+      findings.push(f("error", "Intet værditilbud above the fold",
+        "Der er ingen synlig headline above the fold. Besøgende skal forstå dit tilbud inden for 3 sekunder.",
+        "Tilføj en benefit-orienteret headline øverst. F.eks.: 'Spar 30% på [produkt] – Levering på 1-2 dage'.",
+        "high", "Maksimeringsloven"));
     } else {
-      findings.push(f("warning", "H1 mangler benefit-fokus", `H1 "${h1Text.slice(0, 60)}..." beskriver ikke tydeligt en fordel for besøgende.`, "Omskriv din H1 så den fokuserer på den primære fordel for kunden, ikke bare hvad du laver.", "high", "Maksimeringsloven"));
+      const benefitWords = /spar|gratis|hurtig|nem|bedste|eksklusiv|populær|save|free|fast|easy|best|exclusive|proven|boost|øg|forbedre/i;
+      if (benefitWords.test(heroText)) {
+        findings.push(f("success", "Benefit-orienteret headline",
+          `Din H1 "${heroText.slice(0, 60)}..." kommunikerer en konkret fordel for besøgende.`, "", "high", "Maksimeringsloven"));
+      } else {
+        findings.push(f("warning", "Headline mangler benefit-fokus",
+          `Din H1 "${heroText.slice(0, 60)}..." beskriver hvad du gør, men ikke hvad kunden får ud af det.`,
+          `Omskriv til at fokusere på kundens udbytte. I stedet for "${heroText.slice(0, 40)}..." prøv f.eks.: "Opnå [benefit] med [dit produkt/service]".`,
+          "high", "Maksimeringsloven"));
+      }
+    }
+
+    // Hero section (only relevant for homepage/landing)
+    if (data.structuralInfo.hasHero || data.firstScreenContent.hasImageAboveFold) {
+      findings.push(f("success", "Hero-sektion med visuelt element",
+        "Forsiden har et visuelt element above the fold der fanger opmærksomheden.", "", "medium", "Synlighedslov"));
+    } else {
+      findings.push(f("warning", "Svagt visuelt above the fold",
+        "Ingen markant hero-sektion eller stort billede above the fold. Første indtryk er kritisk.",
+        "Tilføj et hero-billede eller -video der viser dit produkt/service i brug. Vis resultatet, ikke bare produktet.",
+        "medium", "Synlighedslov"));
+    }
+
+    // Subtext
+    if (data.firstScreenContent.heroSubtext.length > 20) {
+      findings.push(f("success", "Underoverskrift uddyber værdien",
+        "Der er en underoverskrift der uddyber dit værditilbud – det hjælper besøgende med at forstå dit tilbud.", "", "medium", "Klarhedslov"));
     }
   }
 
-  if (data.structuralInfo.hasHero) {
-    findings.push(f("success", "Hero-sektion fundet", "Siden har en hero/banner-sektion above the fold der fanger opmærksomheden.", "", "medium", "Synlighedslov"));
-  } else {
-    findings.push(f("warning", "Ingen hero-sektion detekteret", "Der blev ikke fundet en tydelig hero-sektion. Første indtryk er kritisk.", "Tilføj en prominent hero-sektion med headline, underoverskrift, CTA og visuelt element.", "high", "Synlighedslov"));
+  // Product page specific
+  if (pageType === "produktside") {
+    if (!data.structuralInfo.hasProductGallery) {
+      findings.push(f("warning", "Ingen produktbillede-galleri detekteret",
+        "Et stærkt produktbillede-galleri med flere vinkler er afgørende for produktsider.",
+        "Tilføj min. 3-5 produktbilleder fra forskellige vinkler + evt. lifestyle-billede der viser produktet i brug.",
+        "high", "Alignment-lov"));
+    }
   }
 
-  if (data.structuralInfo.hasVideo) {
-    findings.push(f("success", "Video-indhold fundet", "Siden indeholder video, som øger engagement og kan forklare komplekse tilbud hurtigt.", "", "medium", "Alignment-lov"));
-  }
-
+  // Meta description
   const metaDesc = data.metaDescription;
   if (!metaDesc) {
-    findings.push(f("error", "Manglende meta description", "Siden har ingen meta description, hvilket påvirker CTR fra søgeresultater negativt.", "Skriv en unik meta description på 140-155 tegn der inkluderer et klart værditilbud og en CTA.", "high", "Synlighedslov"));
-  } else if (metaDesc.length < 100) {
-    findings.push(f("warning", "For kort meta description", `Meta description er kun ${metaDesc.length} tegn. Den bør være 140-155 tegn.`, "Udvid din meta description til 140-155 tegn med tydelige benefits og en call-to-action.", "medium", "Synlighedslov"));
-  } else if (metaDesc.length > 160) {
-    findings.push(f("warning", "For lang meta description", `Meta description er ${metaDesc.length} tegn og vil blive afkortet i søgeresultater.`, "Forkort din meta description til max 155 tegn.", "low", "Synlighedslov"));
+    findings.push(f("error", "Manglende meta description",
+      "Siden har ingen meta description. Det reducerer CTR fra Google med op til 30%.",
+      `Skriv en meta description (140-155 tegn) der inkluderer dit kernebudskab + CTA. F.eks.: "Opdag ${data.title?.split(/[-|–]/)[0]?.trim() || 'vores udvalg'}. Fri fragt | Hurtig levering | 30 dages returret."`,
+      "high", "Synlighedslov"));
+  } else if (metaDesc.length < 100 || metaDesc.length > 160) {
+    findings.push(f("warning", `Meta description er ${metaDesc.length} tegn`,
+      `Ideel længde er 140-155 tegn. Din er ${metaDesc.length} tegn${metaDesc.length < 100 ? " – for kort til at udnytte pladsen i Google" : " – vil blive afkortet"}.`,
+      `Tilpas til 140-155 tegn. Nuværende: "${metaDesc.slice(0, 80)}..."`,
+      "medium", "Synlighedslov"));
   } else {
-    findings.push(f("success", "God meta description", `Meta description har en god længde på ${metaDesc.length} tegn.`, "", "medium", "Synlighedslov"));
+    findings.push(f("success", "God meta description",
+      `Meta description er ${metaDesc.length} tegn – ideel længde for søgeresultater.`, "", "low", "Synlighedslov"));
   }
 
-  const score = calcScore(findings);
-  return { name: "Above the Fold", score, icon: "👁️", findings };
+  return { name: "Above the Fold", score: calcScore(findings), icon: "👁️", findings };
 }
 
-function analyzeCTA(data: ScrapedData): Category {
+function analyzeCTA(ctx: AnalysisContext): Category {
+  const { data, pageType } = ctx;
   const findings: Finding[] = [];
-  const ctaCount = data.ctas.length;
+  const ctas = data.ctas;
+  const primaryCTAs = ctas.filter((c) => c.isPrimary);
+  const aboveFoldCTAs = ctas.filter((c) => c.isAboveFold);
 
-  if (ctaCount === 0) {
-    findings.push(f("error", "Ingen CTA-knapper fundet", "Siden har ingen synlige CTA-knapper (buttons). Uden en klar call-to-action vet besøgende ikke hvad de skal gøre.", "Tilføj mindst én tydelig, høj-kontrast CTA-knap above the fold med handlingsorienteret tekst.", "high", "Synlighedslov"));
-  } else if (ctaCount === 1) {
-    findings.push(f("warning", "Kun én CTA-knap", "Siden har kun én CTA-knap. Gentagelsesloven siger at CTA bør gentages flere gange.", "Gentag din primære CTA flere steder på siden – mindst above the fold og igen efter nøgleindhold.", "medium", "Gentagelseslov"));
-  } else if (ctaCount >= 2 && ctaCount <= 5) {
-    findings.push(f("success", "Godt antal CTA-knapper", `Siden har ${ctaCount} CTA-knapper spredt ud, hvilket giver besøgende flere muligheder for at konvertere.`, "", "medium", "Gentagelseslov"));
+  // CTA presence
+  if (ctas.length === 0) {
+    findings.push(f("error", "Ingen CTA-knapper fundet",
+      "Uden call-to-action ved besøgende ikke hvad de skal gøre. Det er det vigtigste element for konvertering.",
+      pageType === "produktside"
+        ? "Tilføj en tydelig 'Læg i kurv' / 'Køb nu' knap med høj kontrast (f.eks. fuld baggrund, stor font)."
+        : "Tilføj en primær CTA above the fold. Brug action-ord: 'Se vores udvalg', 'Kom i gang', 'Få tilbud'.",
+      "high", "Synlighedslov"));
   } else {
-    findings.push(f("warning", "Mange CTA-knapper", `Siden har ${ctaCount} buttons/CTAs. For mange kan skabe forvirring om hvad der er vigtigst.`, "Reducer antallet af sekundære CTAs og gør den primære CTA tydeligt mest prominent.", "medium", "Friktionslov"));
-  }
-
-  const ctaTexts = data.ctas.map((c) => c.text.toLowerCase()).join(" ");
-  const foundActionWords = textContainsAny(ctaTexts, ACTION_WORDS);
-  if (foundActionWords.length > 0) {
-    findings.push(f("success", "Handlingsorienterede CTA-tekster", `CTA-knapperne bruger action-ord som "${foundActionWords.slice(0, 3).join('", "')}", hvilket motiverer til klik.`, "", "medium", "Maksimeringsloven"));
-  } else if (ctaCount > 0) {
-    findings.push(f("warning", "CTA-tekster mangler action-ord", "CTA-knapperne bruger ikke stærke handlingsord som 'Køb nu', 'Få adgang', 'Start gratis' osv.", "Omskriv CTA-tekster til at bruge klare handlingsord der fortæller besøgende præcis hvad der sker.", "high", "Maksimeringsloven"));
-  }
-
-  const vagueCtas = data.ctas.filter((c) =>
-    /^(læs mere|klik her|mere|submit|send|click here|read more|more|learn more)$/i.test(c.text.trim())
-  );
-  if (vagueCtas.length > 0) {
-    findings.push(f("warning", "Vage CTA-tekster", `${vagueCtas.length} CTA-knap(per) bruger vag tekst som "${vagueCtas[0].text}". Det siger ikke hvad besøgende får.`, "Erstat vage CTA-tekster med specifikke handlinger: 'Få gratis prøveperiode', 'Se vores produkter', 'Book en demo'.", "medium", "Klarhedslov"));
-  }
-
-  const score = calcScore(findings);
-  return { name: "Call to Action", score, icon: "🎯", findings };
-}
-
-function analyzeSocialProof(data: ScrapedData): Category {
-  const findings: Finding[] = [];
-  const text = data.textContent.toLowerCase();
-
-  if (data.socialProof.length === 0) {
-    findings.push(f("error", "Intet social proof fundet", "Siden indeholder ingen synlige social proof-elementer som anmeldelser, testimonials, ratings eller kundeudtalelser.", "Tilføj social proof: Trustpilot-widget, kundeudtalelser med navne/billeder, antal tilfredse kunder, eller presselogoer.", "high", "Tillidslov"));
-  } else {
-    findings.push(f("success", "Social proof er til stede", `Fandt social proof-signaler: ${data.socialProof.join(", ")}. Det opbygger tillid hos besøgende.`, "", "high", "Tillidslov"));
-  }
-
-  if (data.structuralInfo.hasTestimonials) {
-    findings.push(f("success", "Testimonials-sektion fundet", "Siden har en dedikeret testimonials/anmeldelsessektion, som er stærkt tillidsopbyggende.", "", "high", "Tillidslov"));
-  } else {
-    findings.push(f("warning", "Mangler testimonials-sektion", "Ingen dedikeret testimonials-sektion fundet. Kundecitater er et af de stærkeste CRO-virkemidler.", "Tilføj en testimonials-sektion med ægte kundecitater, navne og helst billeder.", "high", "Tillidslov"));
-  }
-
-  if (data.structuralInfo.hasTrustBadges) {
-    findings.push(f("success", "Trust badges fundet", "Siden viser trust badges / sikkerhedssymboler der opbygger troværdighed.", "", "medium", "Tillidslov"));
-  } else {
-    findings.push(f("error", "Mangler trust badges", "Ingen trust badges fundet (fx e-mærket, sikker betaling, Trustpilot-badge, garanti-segl).", "Tilføj trust badges tæt på CTA-knapper og i checkout – fx 'Sikker betaling', 'Pengene-tilbage-garanti', Trustpilot-score.", "high", "Tillidslov"));
-  }
-
-  const trustWordsFound = textContainsAny(text, TRUST_WORDS);
-  if (trustWordsFound.length > 0) {
-    findings.push(f("success", "Tillids-sprog i teksten", `Teksten indeholder tillidsopbyggende ord: "${trustWordsFound.slice(0, 4).join('", "')}".`, "", "medium", "Tillidslov"));
-  } else {
-    findings.push(f("warning", "Mangler tillids-sprog", "Teksten nævner ikke garanti, returret, fri fragt eller lignende tillidsopbyggende elementer.", "Tilføj synlige garantier, returpolitik og leveringsinfo i din tekst – gerne tæt på CTA.", "medium", "Tab-lov"));
-  }
-
-  if (/trustpilot/i.test(text)) {
-    findings.push(f("success", "Trustpilot-integration", "Trustpilot er nævnt på siden, hvilket er stærkt social proof for danske forbrugere.", "", "high", "Tillidslov"));
-  }
-
-  const score = calcScore(findings);
-  return { name: "Social Proof & Tillid", score, icon: "⭐", findings };
-}
-
-function analyzeContent(data: ScrapedData): Category {
-  const findings: Finding[] = [];
-  const headingCount = data.headings.length;
-
-  if (headingCount === 0) {
-    findings.push(f("error", "Ingen overskrifter", "Siden har ingen overskrifter (H1-H6). Det er kritisk for både SEO og scannability.", "Tilføj en klar overskriftsstruktur: H1 for hovedbudskab, H2 for sektioner, H3 for undersektioner.", "high", "Klarhedslov"));
-  } else {
-    const h1Count = data.headings.filter((h) => h.tag === "h1").length;
-    const h2Count = data.headings.filter((h) => h.tag === "h2").length;
-    const h3Count = data.headings.filter((h) => h.tag === "h3").length;
-
-    if (h2Count >= 2) {
-      findings.push(f("success", "God overskriftsstruktur", `Siden har ${h1Count} H1, ${h2Count} H2 og ${h3Count} H3 – det giver godt hierarki og scannability.`, "", "medium", "Klarhedslov"));
+    // Above fold CTA
+    if (aboveFoldCTAs.length === 0) {
+      findings.push(f("error", "Ingen CTA synlig above the fold",
+        "Der er CTAs på siden, men ingen er synlige uden at scrolle. De fleste besøgende ser kun above the fold.",
+        "Flyt den vigtigste CTA op above the fold, tæt på din headline/værditilbud.",
+        "high", "Synlighedslov"));
     } else {
-      findings.push(f("warning", "Svag overskriftsstruktur", `Kun ${h2Count} H2-overskrifter. Flere H2-sektioner gør indholdet nemmere at scanne.`, "Opdel indholdet i klare sektioner med H2-overskrifter for hvert emne/benefit.", "medium", "Klarhedslov"));
+      findings.push(f("success", `CTA synlig above the fold`,
+        `${aboveFoldCTAs.length} CTA-knap(per) er synlig(e) med det samme – godt for konvertering.`, "", "high", "Synlighedslov"));
+    }
+
+    // Primary CTA prominence
+    if (primaryCTAs.length === 0 && ctas.length > 0) {
+      findings.push(f("warning", "Ingen fremtrædende primær CTA",
+        "Alle CTA-knapper er små eller har lille font. Den vigtigste handling bør visuelt skille sig ud.",
+        "Gør din primære CTA større (min. 44px høj, 16px+ font), med solid baggrundfarve der skiller sig ud fra resten af designet.",
+        "high", "Synlighedslov"));
+    } else if (primaryCTAs.length >= 1) {
+      findings.push(f("success", "Fremtrædende primær CTA",
+        `Der er ${primaryCTAs.length} tydelig(e) primær CTA-knap(per) med god størrelse og synlighed.`, "", "high", "Synlighedslov"));
+    }
+
+    // CTA text quality
+    const actionPattern = /køb|bestil|tilføj|start|prøv|hent|få|book|download|tilmeld|opret|se |shop|buy|add|get|try|order|subscribe/i;
+    const vaguePattern = /^(læs mere|klik her|mere|submit|send|click here|read more|more|learn more|link|undefined)$/i;
+    const ctaWithAction = ctas.filter((c) => actionPattern.test(c.text));
+    const vagueCtas = ctas.filter((c) => vaguePattern.test(c.text.trim()));
+
+    if (ctaWithAction.length > 0) {
+      findings.push(f("success", "Handlingsorienterede CTA-tekster",
+        `CTAs bruger gode action-ord: "${ctaWithAction.slice(0, 2).map((c) => c.text).join('", "')}"`, "", "medium", "Maksimeringsloven"));
+    } else {
+      const suggestion = pageType === "produktside"
+        ? "'Læg i kurv', 'Køb nu – Fri fragt'"
+        : "'Se vores udvalg', 'Få gratis tilbud', 'Start i dag'";
+      findings.push(f("warning", "CTA-tekster mangler handling",
+        "Ingen CTA-knapper bruger stærke handlingsord. Vage tekster konverterer markant dårligere.",
+        `Omskriv til specifikke handlinger: ${suggestion}. Tilføj gerne benefit i knapteksten.`,
+        "high", "Maksimeringsloven"));
+    }
+
+    if (vagueCtas.length > 0) {
+      findings.push(f("warning", `${vagueCtas.length} vag(e) CTA-tekst(er)`,
+        `"${vagueCtas[0].text}" siger ikke hvad besøgende får. Det reducerer klikrate markant.`,
+        `Erstat "${vagueCtas[0].text}" med specifik handling + benefit: "Se produkter – Fri fragt over 499 kr" i stedet for "Læs mere".`,
+        "medium", "Klarhedslov"));
     }
   }
 
-  if (!data.title || data.title.length === 0) {
-    findings.push(f("error", "Manglende title tag", "Siden har ingen title tag, hvilket er kritisk for SEO.", "Tilføj en unik title tag på 55-60 tegn med dit primære keyword og værditilbud.", "high", "Synlighedslov"));
-  } else if (data.title.length < 30) {
-    findings.push(f("warning", "For kort title tag", `Title tag er kun ${data.title.length} tegn: "${data.title}". Den bør være 55-60 tegn.`, "Udvid din title tag til 55-60 tegn med relevante keywords og benefits.", "medium", "Synlighedslov"));
-  } else if (data.title.length > 65) {
-    findings.push(f("warning", "For lang title tag", `Title tag er ${data.title.length} tegn og vil blive afkortet i Google.`, "Forkort din title tag til max 60 tegn.", "low", "Synlighedslov"));
-  } else {
-    findings.push(f("success", "God title tag-længde", `Title tag har en god længde på ${data.title.length} tegn: "${data.title}".`, "", "medium", "Synlighedslov"));
+  // Repetition (not just count, but distribution)
+  if (ctas.length >= 2 && ctas.length <= 8) {
+    const aboveCount = aboveFoldCTAs.length;
+    const belowCount = ctas.length - aboveCount;
+    if (aboveCount > 0 && belowCount > 0) {
+      findings.push(f("success", "CTA gentaget på siden",
+        `CTA er placeret both above (${aboveCount}) og below fold (${belowCount}) – god brug af gentagelsesloven.`, "", "medium", "Gentagelseslov"));
+    }
   }
 
-  const imagesWithoutAlt = data.images.filter((i) => !i.hasAlt);
-  if (imagesWithoutAlt.length > 0) {
-    findings.push(f("warning", "Billeder mangler alt-tekst", `${imagesWithoutAlt.length} af ${data.images.length} billeder mangler alt-tekst. Dårligt for SEO og tilgængelighed.`, "Tilføj beskrivende alt-tekst på alle billeder der forklarer hvad billedet viser.", "medium", "Synlighedslov"));
+  return { name: "Call to Action", score: calcScore(findings), icon: "🎯", findings };
+}
+
+function analyzeTrust(ctx: AnalysisContext): Category {
+  const { data, pageType } = ctx;
+  const findings: Finding[] = [];
+  const ts = data.trustSignals;
+
+  const badges = ts.filter((t) => t.type === "badge");
+  const textSignals = ts.filter((t) => t.type === "text");
+  const socialProof = ts.filter((t) => t.type === "social_proof");
+  const authority = ts.filter((t) => t.type === "authority");
+
+  // Social proof
+  if (socialProof.length > 0) {
+    findings.push(f("success", "Social proof til stede",
+      `Fandt ${socialProof.length} social proof-signal(er): ${socialProof.map((s) => s.description).join(", ")}.`, "", "high", "Tillidslov"));
+  } else {
+    findings.push(f("error", "Mangler social proof",
+      "Ingen anmeldelser, ratings eller kundeudtalelser fundet. 93% af forbrugere læser reviews før køb.",
+      "Tilføj Trustpilot-widget, Google Reviews, eller kundecitater med navn og evt. billede. Placér tæt på CTA.",
+      "high", "Tillidslov"));
+  }
+
+  // Trust badges (visual)
+  if (badges.length > 0) {
+    findings.push(f("success", "Visuelle trust badges",
+      `${badges.length} trust badge(s) fundet – visuelle symboler opbygger tillid hurtigt.`, "", "medium", "Tillidslov"));
+  } else {
+    const where = pageType === "produktside" ? "tæt på 'Læg i kurv'-knappen" : "i header/footer og nær CTAs";
+    findings.push(f("warning", "Ingen visuelle trust badges",
+      "Ingen visuelt synlige trust badges som e-mærket, sikker betaling-ikon, eller Trustpilot-badge.",
+      `Tilføj trust badges ${where}. Eksempler: 'Sikker betaling', 'e-mærket', Trustpilot-score, 'Trusted shop'.`,
+      "medium", "Tillidslov"));
+  }
+
+  // Text-based trust signals
+  if (textSignals.length > 0) {
+    findings.push(f("success", "Tillids-signaler i tekst",
+      `Fandt: ${textSignals.map((s) => s.description).join(", ")}. Det reducerer oplevelsen af risiko.`, "", "medium", "Tab-lov"));
+  } else {
+    findings.push(f("warning", "Mangler tillids-tekst",
+      "Ingen garanti, returret, fri fragt eller sikker betaling nævnt i teksten.",
+      "Tilføj synlige tillids-elementer: '30 dages returret', 'Gratis fragt over 499 kr', 'Sikker betaling med kort & MobilePay'.",
+      "high", "Tab-lov"));
+  }
+
+  // Authority
+  if (authority.length > 0) {
+    findings.push(f("success", "Autoritets-signaler",
+      `${authority.map((a) => a.description).join(", ")}. Det opbygger troværdighed.`, "", "medium", "Tillidslov"));
+  }
+
+  // Testimonials section
+  if (data.structuralInfo.hasTestimonials) {
+    findings.push(f("success", "Testimonials-sektion",
+      "Dedikeret testimonials/anmeldelsessektion fundet – et af de stærkeste konverteringsmidler.", "", "high", "Tillidslov"));
+  } else if (["forside", "landingsside", "produktside"].includes(pageType)) {
+    findings.push(f("warning", "Mangler testimonials-sektion",
+      "Ingen dedikeret sektion med kundecitater. Personlige udtalelser konverterer bedre end anonyme ratings.",
+      "Tilføj 2-4 kundecitater med: fuldt navn, evt. billede, specifik result ('Vi øgede vores salg med 34%').",
+      "medium", "Tillidslov"));
+  }
+
+  return { name: "Social Proof & Tillid", score: calcScore(findings), icon: "⭐", findings };
+}
+
+function analyzeContent(ctx: AnalysisContext): Category {
+  const { data, pageType } = ctx;
+  const findings: Finding[] = [];
+  const copy = data.copyAnalysis;
+
+  // Heading structure
+  const h1c = data.headings.filter((h) => h.tag === "h1").length;
+  const h2c = data.headings.filter((h) => h.tag === "h2").length;
+
+  if (h2c >= 2) {
+    findings.push(f("success", "God overskriftsstruktur",
+      `${h1c} H1 og ${h2c} H2-overskrifter – giver godt hierarki og gør indholdet scanbart.`, "", "medium", "Klarhedslov"));
+  } else if (data.headings.length > 0) {
+    findings.push(f("warning", "Svag overskriftsstruktur",
+      `Kun ${h2c} H2-overskrift(er). Besøgende scanner overskrifter – brug dem til at fortælle din historie.`,
+      "Opdel indholdet med H2-overskrifter for hvert kernebudskab. F.eks.: 'Hvorfor vælge os', 'Sådan virker det', 'Det siger kunderne'.",
+      "medium", "Klarhedslov"));
+  }
+
+  // Title tag
+  if (!data.title) {
+    findings.push(f("error", "Manglende title tag", "Ingen title tag – kritisk for SEO.",
+      "Tilføj en title tag (55-60 tegn) med primært keyword + benefit. F.eks.: '[Brand] – [Hvad du tilbyder] | [Benefit]'.",
+      "high", "Synlighedslov"));
+  } else if (data.title.length >= 40 && data.title.length <= 65) {
+    findings.push(f("success", "God title tag",
+      `"${data.title}" (${data.title.length} tegn) – god længde for søgeresultater.`, "", "medium", "Synlighedslov"));
+  } else {
+    findings.push(f("warning", `Title tag er ${data.title.length} tegn`,
+      `"${data.title}" – ${data.title.length < 40 ? "for kort, du udnytter ikke pladsen i Google" : "for lang, vil blive afkortet"}.`,
+      `Tilpas til 55-60 tegn. Forslag: "${data.title.slice(0, 45)}... | [Benefit]"`,
+      "medium", "Synlighedslov"));
+  }
+
+  // Alt text
+  const noAlt = data.images.filter((i) => !i.hasAlt);
+  if (noAlt.length > 0) {
+    findings.push(f("warning", `${noAlt.length} billede(r) mangler alt-tekst`,
+      `${noAlt.length} af ${data.images.length} billeder har ingen alt-tekst. Dårligt for SEO og tilgængelighed.`,
+      "Tilføj beskrivende alt-tekst der forklarer billedets indhold. F.eks.: 'Sort læderjakke model set forfra' i stedet for 'IMG_001'.",
+      "medium", "Synlighedslov"));
   } else if (data.images.length > 0) {
-    findings.push(f("success", "Alle billeder har alt-tekst", `Alle ${data.images.length} billeder har alt-tekst – godt for SEO og tilgængelighed.`, "", "medium", "Synlighedslov"));
+    findings.push(f("success", "Alle billeder har alt-tekst",
+      `${data.images.length} billeder med alt-tekst – godt for SEO og tilgængelighed.`, "", "low", "Synlighedslov"));
   }
 
-  const textLength = data.textContent.length;
-  if (textLength < 300) {
-    findings.push(f("warning", "Meget lidt tekstindhold", `Siden har kun ca. ${textLength} tegn tekst. Det er meget lidt for SEO og konvertering.`, "Tilføj mere indhold: uddyb dit værditilbud, beskriv benefits, tilføj FAQ-sektion.", "medium", "Klarhedslov"));
-  } else if (textLength > 500) {
-    findings.push(f("success", "Tilstrækkeligt tekstindhold", "Siden har en god mængde tekstindhold til at kommunikere værdi og ranke i søgemaskiner.", "", "low", "Klarhedslov"));
+  // Copy quality: Benefits vs Features
+  if (copy.benefitStatements.length >= 2) {
+    findings.push(f("success", "Benefit-orienteret copy",
+      `Fandt ${copy.benefitStatements.length} benefit-udsagn i teksten. Det appellerer til kundens motivation.`, "", "medium", "Maksimeringsloven"));
+  } else {
+    findings.push(f("warning", "Copy er for feature-fokuseret",
+      copy.featureStatements.length > 0
+        ? `Fandt ${copy.featureStatements.length} feature-beskrivelser men kun ${copy.benefitStatements.length} benefits. Kunder køber benefits, ikke features.`
+        : "Teksten mangler tydelige benefit-udsagn der fortæller kunden hvad de opnår.",
+      "Omskriv features til benefits. I stedet for 'Lavet af 100% bomuld' → 'Blød som silke – hele dagen lang'. Fokus: hvad kunden MÆRKER, ikke hvad produktet ER.",
+      "medium", "Maksimeringsloven"));
   }
 
-  const text = data.textContent.toLowerCase();
-  const howItWorks = /sådan virker|how it works|hvordan fungerer|trin for trin|step by step/i.test(text);
-  if (howItWorks) {
-    findings.push(f("success", "'Sådan virker det'-sektion", "Siden forklarer tydeligt processen/fremgangsmåden, hvilket reducerer usikkerhed.", "", "medium", "Klarhedslov"));
+  // USP visibility
+  if (copy.usps.length >= 2) {
+    findings.push(f("success", "USP'er synlige",
+      `${copy.usps.length} USP-elementer fundet: "${copy.usps.slice(0, 2).join('", "')}"`, "", "medium", "Maksimeringsloven"));
+  } else if (["forside", "produktside", "landingsside"].includes(pageType)) {
+    findings.push(f("warning", "USP'er ikke tydeligt fremhævet",
+      "Ingen tydelig USP-sektion fundet (unique selling propositions). Besøgende skal hurtigt forstå hvorfor vælge dig.",
+      "Tilføj 3-5 USP'er synligt under headline. F.eks.: '✓ Fri fragt over 499 kr  ✓ 30 dages returret  ✓ Dansk kundeservice  ✓ Levering på 1-2 dage'.",
+      "high", "Maksimeringsloven"));
   }
 
-  const score = calcScore(findings);
-  return { name: "Indhold & Copywriting", score, icon: "✍️", findings };
+  return { name: "Indhold & Copywriting", score: calcScore(findings), icon: "✍️", findings };
 }
 
-function analyzeNavigation(data: ScrapedData): Category {
+function analyzeNavigation(ctx: AnalysisContext): Category {
+  const { data, pageType } = ctx;
   const findings: Finding[] = [];
+  const si = data.structuralInfo;
 
-  if (data.structuralInfo.hasNav) {
-    findings.push(f("success", "Navigation fundet", "Siden har et nav-element, hvilket giver brugere en klar måde at navigere på.", "", "medium", "Klarhedslov"));
+  if (si.hasNav) {
+    if (si.navItemCount > 0 && si.navItemCount <= 7) {
+      findings.push(f("success", "Klar navigation",
+        `Navigation med ${si.navItemCount} links – overskueligt og inden for det anbefalede max 7.`, "", "medium", "Klarhedslov"));
+    } else if (si.navItemCount > 7) {
+      findings.push(f("warning", `${si.navItemCount} menupunkter i navigation`,
+        `Det er over de anbefalede max 7. For mange valgmuligheder skaber beslutningsparalyse.`,
+        "Reducer til max 5-7 primære menupunkter. Flyt resten til dropdown-undermenuer eller footer.",
+        "medium", "Friktionslov"));
+    } else {
+      findings.push(f("success", "Navigation fundet", "Siden har en navigationsstruktur.", "", "low", "Klarhedslov"));
+    }
   } else {
-    findings.push(f("error", "Ingen navigation fundet", "Siden har intet nav-element. Besøgende kan ikke finde rundt.", "Tilføj en klar top-navigation med de vigtigste sider (max 7 menupunkter).", "high", "Klarhedslov"));
+    if (pageType !== "checkout") {
+      findings.push(f("error", "Ingen navigation fundet",
+        "Besøgende kan ikke navigere til andre sider.",
+        "Tilføj en klar top-navigation med de vigtigste sider.", "high", "Klarhedslov"));
+    } else {
+      findings.push(f("success", "Minimal navigation i checkout",
+        "Checkout-sider bør have minimal navigation for at reducere distraktioner.", "", "medium", "Friktionslov"));
+    }
   }
 
-  if (data.structuralInfo.hasFooter) {
-    findings.push(f("success", "Footer fundet", "Siden har en footer med yderligere navigation og information.", "", "low", "Klarhedslov"));
-  } else {
-    findings.push(f("warning", "Ingen footer fundet", "Siden mangler en footer. Footeren er vigtig for tillid (kontaktinfo, politikker) og SEO (interne links).", "Tilføj en footer med kontaktinfo, links til vigtige sider, og evt. trust badges.", "medium", "Tillidslov"));
+  if (si.hasFooter) {
+    findings.push(f("success", "Footer med info", "Footer giver ekstra navigation og tillid.", "", "low", "Tillidslov"));
   }
 
-  const internalLinks = data.links.filter((l) => !l.isExternal).length;
-  const externalLinks = data.links.filter((l) => l.isExternal).length;
-
-  if (internalLinks < 3) {
-    findings.push(f("warning", "Få interne links", `Kun ${internalLinks} interne links. Det begrænser navigation og SEO-linkjuice.`, "Tilføj flere interne links til relevante sider for at forbedre navigation og SEO.", "medium", "Synlighedslov"));
-  } else {
-    findings.push(f("success", "God intern linking", `${internalLinks} interne links giver god navigation og SEO-struktur.`, "", "low", "Synlighedslov"));
+  if (si.hasBreadcrumbs) {
+    findings.push(f("success", "Breadcrumbs implementeret",
+      "Breadcrumbs giver brugere kontekst og forbedrer SEO med intern linking.", "", "medium", "Klarhedslov"));
+  } else if (["produktside", "kollektionsside"].includes(pageType)) {
+    findings.push(f("warning", "Mangler breadcrumbs",
+      "Ingen breadcrumbs fundet. På produkt- og kategorisider hjælper breadcrumbs navigation og SEO.",
+      "Tilføj breadcrumbs: 'Forside > Kategori > Produkt'. Implementér med schema.org BreadcrumbList markup.",
+      "medium", "Klarhedslov"));
   }
 
-  if (externalLinks > 10) {
-    findings.push(f("warning", "Mange eksterne links", `${externalLinks} eksterne links kan lede besøgende væk fra siden og fra konverteringen.`, "Reducer antallet af eksterne links, eller sæt dem til at åbne i nye vinduer.", "medium", "Friktionslov"));
+  if (si.hasFAQ) {
+    findings.push(f("success", "FAQ-sektion fundet",
+      "FAQ adresserer tvivl, reducerer supportbelastning og kan ranke som featured snippet i Google.", "", "medium", "Tab-lov"));
+  } else if (["forside", "produktside", "landingsside"].includes(pageType)) {
+    findings.push(f("warning", "Mangler FAQ",
+      "Ingen FAQ fundet. En FAQ adresserer de top-indvendinger der forhindrer køb.",
+      "Tilføj FAQ med de 4-6 mest stillede spørgsmål. F.eks.: 'Hvor lang er leveringstiden?', 'Kan jeg returnere?', 'Hvilke betalingsmetoder?'. Tilføj FAQPage schema markup.",
+      "medium", "Tab-lov"));
   }
 
-  const sectionCount = data.structuralInfo.sectionCount;
-  if (sectionCount >= 3) {
-    findings.push(f("success", "God sektionsopdeling", `Siden har ${sectionCount} sektioner, som skaber visuel adskillelse og gør indholdet overskueligt.`, "", "medium", "Klarhedslov"));
-  } else if (sectionCount === 0) {
-    findings.push(f("warning", "Ingen sektionsopdeling", "Siden bruger ikke semantiske section-elementer til at opdele indholdet.", "Opdel indholdet i klare sektioner med baggrundsskift for visuel adskillelse.", "medium", "Klarhedslov"));
-  }
-
-  if (data.structuralInfo.hasFAQ) {
-    findings.push(f("success", "FAQ-sektion fundet", "FAQ-sektionen adresserer tvivl og reducerer friktion – godt for konvertering og SEO.", "", "medium", "Tab-lov"));
-  } else {
-    findings.push(f("warning", "Mangler FAQ-sektion", "Ingen FAQ fundet. En FAQ adresserer indvendinger, bygger tillid og forbedrer SEO.", "Tilføj en FAQ med de 4-8 mest stillede spørgsmål. Gerne med schema markup.", "medium", "Tab-lov"));
-  }
-
-  const score = calcScore(findings);
-  return { name: "Navigation & Struktur", score, icon: "🧭", findings };
+  return { name: "Navigation & Struktur", score: calcScore(findings), icon: "🧭", findings };
 }
 
-function analyzeDesignUX(data: ScrapedData): Category {
+function analyzeDesignUX(ctx: AnalysisContext): Category {
+  const { data } = ctx;
   const findings: Finding[] = [];
 
-  if (data.images.length === 0) {
-    findings.push(f("error", "Ingen billeder", "Siden har ingen billeder. Visuelt indhold er kritisk for engagement og konvertering.", "Tilføj relevante billeder: produktfotos, hero-billeder, team-fotos eller illustrationer.", "high", "Alignment-lov"));
-  } else if (data.images.length >= 3) {
-    findings.push(f("success", "Godt visuelt indhold", `Siden har ${data.images.length} billeder, som beriger det visuelle udtryk.`, "", "medium", "Alignment-lov"));
+  const imgCount = data.images.length;
+  if (imgCount >= 3) {
+    findings.push(f("success", "Godt visuelt indhold", `${imgCount} billeder beriger det visuelle udtryk.`, "", "medium", "Alignment-lov"));
+  } else if (imgCount === 0) {
+    findings.push(f("error", "Ingen billeder",
+      "Helt uden billeder. Visuelt indhold er afgørende for engagement.",
+      "Tilføj relevante billeder: produktfotos, hero-billeder, eller illustrationer der forklarer dit tilbud.", "high", "Alignment-lov"));
   } else {
-    findings.push(f("warning", "Få billeder", `Kun ${data.images.length} billede(r) på siden. Flere visuelle elementer øger engagement.`, "Tilføj flere relevante billeder: produktbilleder, ikoner, illustrationer.", "medium", "Alignment-lov"));
+    findings.push(f("warning", "Få billeder",
+      `Kun ${imgCount} billede(r). Mere visuelt indhold øger engagement og tid på siden.`,
+      "Tilføj produktbilleder, lifestyle-fotos, ikoner eller illustrationer til hvert indholdsafsnit.", "medium", "Alignment-lov"));
   }
 
   if (data.structuralInfo.hasVideo) {
-    findings.push(f("success", "Video-indhold", "Siden indeholder video, hvilket øger engagement og tid på siden markant.", "", "medium", "Alignment-lov"));
-  } else {
-    findings.push(f("warning", "Ingen video", "Ingen video fundet. Video er et af de mest effektive midler til at forklare og konvertere.", "Overvej at tilføje en forklaringsvideo eller produktvideo above the fold.", "medium", "Alignment-lov"));
+    findings.push(f("success", "Video-indhold", "Video øger engagement med op til 80% og tid på siden markant.", "", "medium", "Alignment-lov"));
   }
 
   if (data.structuralInfo.sectionCount >= 3) {
-    findings.push(f("success", "Visuelt opdelt layout", "Indholdet er opdelt i sektioner, hvilket giver et overskueligt og professionelt udtryk.", "", "medium", "Klarhedslov"));
+    findings.push(f("success", "Visuelt opdelt layout",
+      `${data.structuralInfo.sectionCount} sektioner giver god visuel adskillelse og overskuelighed.`, "", "medium", "Klarhedslov"));
   }
 
-  const ogImage = data.metaTags["og:image"];
-  if (ogImage) {
-    findings.push(f("success", "Open Graph-billede", "Siden har et OG-billede til sociale medier – vigtigt for delinger.", "", "low", "Synlighedslov"));
+  if (data.metaTags["og:image"]) {
+    findings.push(f("success", "Open Graph-billede", "OG-billede sat – vigtigt for previews på sociale medier.", "", "low", "Synlighedslov"));
   } else {
-    findings.push(f("warning", "Mangler Open Graph-billede", "Intet og:image sat. Når siden deles på sociale medier vises intet preview-billede.", "Tilføj et og:image meta tag med et attraktivt billede (1200x630px).", "medium", "Synlighedslov"));
+    findings.push(f("warning", "Mangler Open Graph-billede",
+      "Ingen og:image. Deling på Facebook/LinkedIn viser intet preview.",
+      "Tilføj et attraktivt og:image (1200x630px) med dit logo/produkt og en kort tekst.", "medium", "Synlighedslov"));
   }
 
-  const score = calcScore(findings);
-  return { name: "Visuelt Design & UX", score, icon: "🎨", findings };
+  return { name: "Visuelt Design & UX", score: calcScore(findings), icon: "🎨", findings };
 }
 
-function analyzeMobilePerformance(data: ScrapedData): Category {
+function analyzePerformance(ctx: AnalysisContext): Category {
+  const { data, pageSpeed } = ctx;
   const findings: Finding[] = [];
-  const { loadTime, domContentLoaded, resourceCount } = data.performance;
 
-  if (loadTime < 2000) {
-    findings.push(f("success", "Hurtig load speed", `Siden loadede på ${(loadTime / 1000).toFixed(1)}s – under 2 sekunder er fremragende.`, "", "high", "Friktionslov"));
-  } else if (loadTime < 4000) {
-    findings.push(f("warning", "Acceptabel load speed", `Siden loadede på ${(loadTime / 1000).toFixed(1)}s. Under 2 sekunder er ideelt.`, "Optimér billeder (WebP/AVIF), aktiver caching, reducer JavaScript og antal HTTP-requests.", "high", "Friktionslov"));
+  if (pageSpeed) {
+    // Use real Lighthouse data
+    const ps = pageSpeed;
+    if (ps.performanceScore >= 90) {
+      findings.push(f("success", `Lighthouse score: ${ps.performanceScore}/100`,
+        `Fremragende performance-score fra Google PageSpeed Insights (${ps.strategy}).`, "", "high", "Friktionslov"));
+    } else if (ps.performanceScore >= 50) {
+      findings.push(f("warning", `Lighthouse score: ${ps.performanceScore}/100`,
+        `Performance-scoren fra Google PageSpeed Insights er ${ps.performanceScore}/100 (${ps.strategy}). Under 90 er suboptimalt.`,
+        "Fokusér på at reducere LCP (største billede/tekst), minimér JavaScript-bundler og optimer billeder til WebP/AVIF.",
+        "high", "Friktionslov"));
+    } else {
+      findings.push(f("error", `Lighthouse score: ${ps.performanceScore}/100`,
+        `Kritisk lav performance-score fra Google PageSpeed Insights (${ps.strategy}). Det påvirker både SEO-ranking og konverteringsrate.`,
+        "Prioritér: 1) Optimer billeder (WebP, lazy-load) 2) Reducer render-blocking JS/CSS 3) Aktivér server-caching/CDN 4) Reducer tredjepartsscripts.",
+        "high", "Friktionslov"));
+    }
+
+    // LCP
+    if (ps.lcp > 0) {
+      const lcpSec = (ps.lcp / 1000).toFixed(1);
+      if (ps.lcp <= 2500) {
+        findings.push(f("success", `LCP: ${lcpSec}s (god)`,
+          `Largest Contentful Paint er ${lcpSec}s – under Googles anbefaling på 2.5s.`, "", "high", "Friktionslov"));
+      } else if (ps.lcp <= 4000) {
+        findings.push(f("warning", `LCP: ${lcpSec}s (behøver forbedring)`,
+          `Largest Contentful Paint er ${lcpSec}s. Google anbefaler under 2.5s.`,
+          "Optimer det største synlige element (typisk hero-billede): brug WebP/AVIF, preload det, og reducer dets filstørrelse.",
+          "high", "Friktionslov"));
+      } else {
+        findings.push(f("error", `LCP: ${lcpSec}s (for langsomt)`,
+          `Largest Contentful Paint er ${lcpSec}s – langt over Googles 2.5s anbefaling. Det koster konverteringer og SEO-ranking.`,
+          "Akut: preload hero-billede, konverter til WebP, reducer JavaScript, overvej CDN. Hvert sekund over 3s mister du ~7% konverteringer.",
+          "high", "Friktionslov"));
+      }
+    }
+
+    // CLS
+    if (ps.cls > 0.25) {
+      findings.push(f("warning", `CLS: ${ps.cls.toFixed(3)} (layout-ustabilitet)`,
+        "Elementer flytter sig mens siden loader. Det skaber dårlig brugeroplevelse og lavere SEO-score.",
+        "Sæt faste width/height på billeder og embeds. Undgå at indsætte indhold dynamisk over eksisterende content.",
+        "medium", "Friktionslov"));
+    } else if (ps.cls >= 0) {
+      findings.push(f("success", `CLS: ${ps.cls.toFixed(3)} (stabilt)`,
+        "Layout er stabilt mens siden loader – god brugeroplevelse.", "", "medium", "Friktionslov"));
+    }
   } else {
-    findings.push(f("error", "Langsom side", `Siden loadede på ${(loadTime / 1000).toFixed(1)}s – det er for langsomt. Hver sekund over 3s koster konverteringer.`, "Prioritér: komprimer billeder, lazy-load under fold, fjern unødvendige scripts, brug CDN.", "high", "Friktionslov"));
+    // Fallback: use our own measurements
+    const lt = data.performance.loadTime;
+    if (lt < 2000) {
+      findings.push(f("success", `Loadtid: ${(lt / 1000).toFixed(1)}s`,
+        "Under 2 sekunder – hurtig nok til de fleste brugere.", "", "high", "Friktionslov"));
+    } else if (lt < 4000) {
+      findings.push(f("warning", `Loadtid: ${(lt / 1000).toFixed(1)}s`,
+        `Loadtiden er ${(lt / 1000).toFixed(1)}s. Under 2 sekunder er ideelt.`,
+        "Optimer billeder (WebP/AVIF), aktivér caching, reducer JavaScript.",
+        "high", "Friktionslov"));
+    } else {
+      findings.push(f("error", `Loadtid: ${(lt / 1000).toFixed(1)}s`,
+        `${(lt / 1000).toFixed(1)}s er for langsomt. 53% forlader en side efter 3 sekunder.`,
+        "Prioritér: komprimer billeder, lazy-load under fold, fjern unødvendige scripts, brug CDN.",
+        "high", "Friktionslov"));
+    }
   }
 
-  if (domContentLoaded > 0 && domContentLoaded < 1500) {
-    findings.push(f("success", "Hurtig DOM ready", `DOM var klar på ${domContentLoaded}ms – godt for interaktivitet.`, "", "medium", "Friktionslov"));
-  } else if (domContentLoaded > 3000) {
-    findings.push(f("warning", "Langsom DOM ready", `DOM Content Loaded tog ${domContentLoaded}ms. Det forsinker interaktivitet.`, "Reducer render-blocking CSS/JS og overvej server-side rendering.", "medium", "Friktionslov"));
-  }
-
-  if (resourceCount > 100) {
-    findings.push(f("warning", "Mange HTTP-requests", `Siden henter ${resourceCount} ressourcer. Det er mange og påvirker loadtiden.`, "Reducer antallet af requests: kombiner CSS/JS, lazy-load billeder, fjern unødvendige scripts.", "medium", "Friktionslov"));
-  } else if (resourceCount > 0) {
-    findings.push(f("success", "Rimeligt antal requests", `Siden henter ${resourceCount} ressourcer – acceptabelt antal.`, "", "low", "Friktionslov"));
-  }
-
-  const viewport = data.metaTags["viewport"];
-  if (viewport) {
-    findings.push(f("success", "Viewport meta tag", "Siden har et viewport meta tag, hvilket er nødvendigt for mobiloptimering.", "", "high", "Friktionslov"));
+  // Viewport meta
+  if (data.metaTags["viewport"]) {
+    findings.push(f("success", "Viewport meta tag", "Mobiloptimering aktiveret med viewport meta tag.", "", "high", "Friktionslov"));
   } else {
-    findings.push(f("error", "Mangler viewport meta tag", "Ingen viewport meta tag fundet. Siden er sandsynligvis ikke mobiloptimeret.", "Tilføj <meta name='viewport' content='width=device-width, initial-scale=1'> i head.", "high", "Friktionslov"));
+    findings.push(f("error", "Mangler viewport meta tag",
+      "Siden er sandsynligvis ikke mobiloptimeret. Over 60% af trafik er mobil.",
+      "Tilføj: <meta name='viewport' content='width=device-width, initial-scale=1'>", "high", "Friktionslov"));
   }
 
-  const score = calcScore(findings);
-  return { name: "Mobil & Performance", score, icon: "📱", findings };
+  return { name: "Mobil & Performance", score: calcScore(findings), icon: "📱", findings };
 }
 
-function analyzeConversionElements(data: ScrapedData): Category {
+function analyzeConversion(ctx: AnalysisContext): Category {
+  const { data, pageType } = ctx;
   const findings: Finding[] = [];
-  const text = data.textContent.toLowerCase();
+  const copy = data.copyAnalysis;
 
-  if (data.structuralInfo.hasPricing) {
-    findings.push(f("success", "Prisvisning fundet", "Siden viser priser, hvilket er vigtigt for transparens og konvertering.", "", "high", "Klarhedslov"));
-  } else {
-    findings.push(f("warning", "Ingen prisvisning detekteret", "Ingen synlig prisvisning fundet. Pris-transparens reducerer friktion markant.", "Vis priser tydeligt. Overvej prisforankring (førpris/nu-pris) for at fremhæve besparelser.", "high", "Klarhedslov"));
+  // Price visibility (context-aware!)
+  if (["produktside", "kollektionsside", "kurv", "checkout"].includes(pageType)) {
+    if (data.pageSignals.priceVisible || data.structuralInfo.hasPricing) {
+      findings.push(f("success", "Priser synlige",
+        "Priser er tydeligt vist – transparens er afgørende for konvertering i e-commerce.", "", "high", "Klarhedslov"));
+    } else {
+      findings.push(f("error", "Priser ikke synlige",
+        "Ingen priser fundet på en side der bør vise dem. Mangel på pristransparens er en topgrund til at besøgende forlader.",
+        "Vis priser tydeligt. Brug prisforankring (førpris/nu-pris) for at fremhæve besparelser: '<s>599 kr</s> 399 kr – Spar 33%'.",
+        "high", "Klarhedslov"));
+    }
   }
 
-  const urgencyFound = textContainsAny(text, URGENCY_WORDS);
-  if (urgencyFound.length > 0) {
-    findings.push(f("success", "Urgency-elementer", `Siden bruger urgency-ord som "${urgencyFound.slice(0, 3).join('", "')}" der motiverer til hurtig handling.`, "", "medium", "Tab-lov"));
-  } else {
-    findings.push(f("warning", "Mangler urgency", "Ingen urgency-elementer fundet (tidsbegrænset tilbud, begrænset antal, osv.).", "Tilføj urgency: 'Kun 3 tilbage', 'Tilbud udløber i dag', 'Begrænset antal' – men hold det ærligt.", "medium", "Tab-lov"));
+  // Urgency
+  if (copy.urgencyElements.length > 0) {
+    findings.push(f("success", "Urgency-elementer",
+      `Bruger urgency: "${copy.urgencyElements[0].slice(0, 60)}..." – motiverer hurtig handling.`, "", "medium", "Tab-lov"));
+  } else if (["produktside", "landingsside"].includes(pageType)) {
+    findings.push(f("warning", "Mangler urgency",
+      "Ingen urgency-elementer fundet. Uden tidspress udskyder besøgende købet og vender ofte aldrig tilbage.",
+      "Tilføj ærlige urgency-elementer: 'Kun 3 tilbage på lager', 'Tilbud gælder kun denne uge', eller 'Bestil inden kl. 14 – levering i morgen'.",
+      "medium", "Tab-lov"));
   }
 
+  // Newsletter
   if (data.structuralInfo.hasNewsletter) {
-    findings.push(f("success", "Nyhedsbrev-signup", "Siden har en nyhedsbrev-tilmelding, som opfanger besøgende der ikke konverterer med det samme.", "", "medium", "Gentagelseslov"));
+    findings.push(f("success", "Email-signup",
+      "Nyhedsbrev-signup opfanger besøgende der ikke konverterer med det samme – vigtig retargeting-kanal.", "", "medium", "Gentagelseslov"));
+  } else if (["forside", "landingsside"].includes(pageType)) {
+    findings.push(f("warning", "Mangler email-signup",
+      "Ingen nyhedsbrev-tilmelding fundet. Du mister muligheden for at følge op på 95%+ af besøgende der ikke køber første gang.",
+      "Tilføj email-signup med incitament: 'Få 10% rabat på din første ordre' eller 'Tilmeld dig og få gratis [ressource]'.",
+      "medium", "Gentagelseslov"));
+  }
+
+  // Guarantee
+  if (copy.guaranteeStatements.length > 0) {
+    findings.push(f("success", "Garanti synlig",
+      `Garanti/returret nævnt: "${copy.guaranteeStatements[0].slice(0, 60)}..." – reducerer oplevelsen af risiko markant.`, "", "high", "Tab-lov"));
   } else {
-    findings.push(f("warning", "Mangler nyhedsbrev-signup", "Ingen email-signup fundet. Du mister muligheden for at følge op på besøgende.", "Tilføj en nyhedsbrev-signup med et incitament (rabat, guide, gratis ressource).", "medium", "Gentagelseslov"));
+    findings.push(f("warning", "Ingen garanti synlig",
+      "Ingen garanti, returret eller money-back er synlig. Det øger den oplevede risiko.",
+      "Tilføj en synlig garanti tæt på CTA. F.eks.: '✓ 30 dages fuld returret  ✓ Pengene tilbage-garanti  ✓ Gratis ombytning'.",
+      "high", "Tab-lov"));
   }
 
-  if (data.forms.length > 0) {
-    findings.push(f("success", "Formular fundet", `Siden har ${data.forms.length} formular(er) til at opfange leads/konverteringer.`, "", "medium", "Synlighedslov"));
+  // Add to cart (product pages)
+  if (pageType === "produktside") {
+    if (data.structuralInfo.hasAddToCart) {
+      findings.push(f("success", "'Læg i kurv' synlig", "Add-to-cart funktionalitet er implementeret.", "", "high", "Synlighedslov"));
+    } else {
+      findings.push(f("error", "Mangler 'Læg i kurv'",
+        "Ingen add-to-cart knap detekteret på produktsiden.",
+        "Tilføj en tydelig, sticky 'Læg i kurv'-knap med høj kontrast. Brug evt. sticky CTA på mobil.",
+        "high", "Synlighedslov"));
+    }
   }
 
-  const guaranteeFound = /garanti|guarantee|money.?back|pengene.?tilbage|returret|return/i.test(text);
-  if (guaranteeFound) {
-    findings.push(f("success", "Garanti nævnt", "Siden nævner garanti eller returret, hvilket reducerer købs-risikoen markant.", "", "high", "Tab-lov"));
-  } else {
-    findings.push(f("warning", "Ingen garanti synlig", "Ingen garanti, returret eller money-back er nævnt. Det øger den oplevede risiko ved køb.", "Tilføj en synlig garanti tæt på CTA: '30 dages returret', 'Fuld pengene-tilbage-garanti'.", "high", "Tab-lov"));
+  // Checkout specific
+  if (pageType === "checkout") {
+    if (data.structuralInfo.hasProgressIndicator) {
+      findings.push(f("success", "Progress-indikator i checkout",
+        "Besøgende kan se hvor de er i checkout-processen – reducerer opgivelse.", "", "medium", "Klarhedslov"));
+    } else {
+      findings.push(f("warning", "Mangler progress-indikator",
+        "Ingen progress-indikator i checkout. Besøgende ved ikke hvor langt de er.",
+        "Tilføj en progress bar: 'Trin 1: Info → Trin 2: Levering → Trin 3: Betaling'.",
+        "medium", "Klarhedslov"));
+    }
   }
 
-  const freeShipping = /gratis fragt|fri fragt|free shipping|fri levering|gratis levering/i.test(text);
-  if (freeShipping) {
-    findings.push(f("success", "Gratis fragt nævnt", "Gratis fragt er kommunikeret – et af de mest effektive konverteringsmidler i e-commerce.", "", "high", "Maksimeringsloven"));
-  }
-
-  const score = calcScore(findings);
-  return { name: "Konverteringselementer", score, icon: "💰", findings };
+  return { name: "Konverteringselementer", score: calcScore(findings), icon: "💰", findings };
 }
 
-function analyzeFriction(data: ScrapedData): Category {
+function analyzeFriction(ctx: AnalysisContext): Category {
+  const { data, pageType } = ctx;
   const findings: Finding[] = [];
 
-  const bigForms = data.forms.filter((f) => f.fields > 5);
+  // Form friction
+  const bigForms = data.forms.filter((fo) => fo.fields > 5);
   if (bigForms.length > 0) {
-    findings.push(f("error", "Formularer med mange felter", `${bigForms.length} formular(er) har mere end 5 felter. Hvert ekstra felt reducerer konverteringsraten.`, "Reducer formularfelter til det absolut nødvendige. Overvej progressiv afsløring (vis flere felter i trin).", "high", "Friktionslov"));
-  } else if (data.forms.length > 0) {
-    findings.push(f("success", "Korte formularer", "Formularerne har et lavt antal felter, hvilket reducerer friktion.", "", "medium", "Friktionslov"));
+    findings.push(f("error", `Formular med ${bigForms[0].fields} felter`,
+      `Hvert ekstra felt reducerer konverteringsraten med ca. 11%. ${bigForms[0].fields} felter er for mange.`,
+      "Reducer til max 3-4 felter for lead gen. For checkout: brug progressiv afsløring (vis felter i trin). Overvej autofill.",
+      "high", "Friktionslov"));
+  } else if (data.forms.length > 0 && data.forms.every((fo) => fo.fields <= 5)) {
+    findings.push(f("success", "Korte formularer",
+      "Formularerne har et lavt antal felter – det reducerer friktion.", "", "medium", "Friktionslov"));
   }
 
-  const formsWithoutLabels = data.forms.filter((f) => !f.hasLabels);
-  if (formsWithoutLabels.length > 0) {
-    findings.push(f("warning", "Formularer mangler labels", `${formsWithoutLabels.length} formular(er) mangler labels på felter. Det skaber forvirring.`, "Tilføj synlige labels på alle formularfelter (ikke kun placeholder-tekst).", "medium", "Klarhedslov"));
-  }
-
-  const externalLinks = data.links.filter((l) => l.isExternal).length;
-  if (externalLinks > 15) {
-    findings.push(f("warning", "For mange udgående links", `${externalLinks} eksterne links kan lede besøgende væk inden de konverterer.`, "Fjern unødvendige eksterne links fra nøglesider, eller åbn dem i nye vinduer.", "medium", "Friktionslov"));
-  }
-
+  // Privacy
   const text = data.textContent.toLowerCase();
-  const privacyMentioned = /privatliv|privacy|gdpr|cookie/i.test(text);
-  if (privacyMentioned) {
-    findings.push(f("success", "Privatlivspolitik synlig", "Siden nævner privatliv/GDPR, hvilket opbygger tillid og reducerer usikkerhed.", "", "medium", "Tab-lov"));
+  if (/privatliv|privacy|gdpr|cookie|persondataforordning/i.test(text)) {
+    findings.push(f("success", "Privatlivspolitik synlig", "GDPR/privatliv er refereret – lovpligtigt og tillidsopbyggende.", "", "medium", "Tab-lov"));
   } else {
-    findings.push(f("warning", "Privatlivspolitik ikke synlig", "Ingen synlig reference til privatlivspolitik. Det er lovpligtigt og tillidsopbyggende.", "Sørg for at privatlivspolitik er linket fra footer og nær formularer.", "medium", "Tab-lov"));
+    findings.push(f("warning", "Privatlivspolitik ikke synlig",
+      "Ingen synlig reference til privatlivspolitik. Det er lovpligtigt i EU.",
+      "Sørg for at linke til privatlivspolitik fra footer og nær alle formularer.", "medium", "Tab-lov"));
   }
 
-  const contactInfo = /kontakt|contact|telefon|phone|email|e-mail|tlf|ring/i.test(text);
-  if (contactInfo) {
-    findings.push(f("success", "Kontaktinfo synlig", "Besøgende kan finde kontaktinformation, hvilket øger tillid markant.", "", "medium", "Tillidslov"));
+  // Contact info
+  if (/kontakt|contact|telefon|phone|@.*\.|e-?mail|tlf|ring til/i.test(text)) {
+    findings.push(f("success", "Kontaktinfo tilgængelig",
+      "Besøgende kan finde kontaktinformation, hvilket øger tillid.", "", "medium", "Tillidslov"));
   } else {
-    findings.push(f("warning", "Ingen kontaktinfo synlig", "Ingen synlig kontaktinformation (telefon, email, adresse). Det kan virke utroværdigt.", "Tilføj kontaktinfo i header eller footer: telefonnummer, email, evt. fysisk adresse.", "medium", "Tillidslov"));
+    findings.push(f("warning", "Kontaktinfo ikke umiddelbart synlig",
+      "Ingen telefonnummer, email eller kontaktformular synlig. Det kan virke utroværdigt.",
+      "Tilføj kontaktinfo i header/footer. Telefonnummer i headeren øger tillid med op til 20%.",
+      "medium", "Tillidslov"));
   }
 
-  if (data.performance.loadTime > 4000) {
-    findings.push(f("error", "Langsom loadtid er en barriere", `${(data.performance.loadTime / 1000).toFixed(1)}s loadtid er en direkte konverteringsbarriere. 53% forlader en side der tager over 3s at loade.`, "Prioritér performance-optimering: billedkomprimering, lazy loading, CDN, reducer scripts.", "high", "Friktionslov"));
+  // External link overload (context-aware)
+  const extLinks = data.links.filter((l) => l.isExternal).length;
+  if (pageType === "checkout" && extLinks > 3) {
+    findings.push(f("warning", `${extLinks} eksterne links i checkout`,
+      "I checkout bør distraktioner minimeres. Eksterne links leder potentielle kunder væk.",
+      "Fjern alle unødvendige eksterne links fra checkout. Kun nødvendige (vilkår, privatlivspolitik) bør blive.",
+      "medium", "Friktionslov"));
   }
 
-  const score = calcScore(findings);
-  return { name: "Friktion & Barrierer", score, icon: "🚧", findings };
+  return { name: "Friktion & Barrierer", score: calcScore(findings), icon: "🚧", findings };
 }
 
-// ─── Score calculation ──────────────────────────────────────────
+// ─── Scoring ────────────────────────────────────────────────────
 
 function calcScore(findings: Finding[]): number {
   if (findings.length === 0) return 50;
-
   const weights = { high: 3, medium: 2, low: 1 };
-  let totalWeight = 0;
-  let earnedWeight = 0;
-
-  for (const finding of findings) {
-    const w = weights[finding.impact];
-    totalWeight += w;
-    if (finding.type === "success") earnedWeight += w;
-    else if (finding.type === "warning") earnedWeight += w * 0.4;
+  let total = 0, earned = 0;
+  for (const fi of findings) {
+    const w = weights[fi.impact];
+    total += w;
+    if (fi.type === "success") earned += w;
+    else if (fi.type === "warning") earned += w * 0.35;
   }
-
-  return Math.round((earnedWeight / totalWeight) * 100);
+  return Math.round((earned / total) * 100);
 }
 
-// ─── Quick wins generator ───────────────────────────────────────
+// ─── Quick wins & actions ───────────────────────────────────────
 
 function generateQuickWins(categories: Category[]): QuickWin[] {
-  const allFindings = categories.flatMap((c) => c.findings);
-
-  const highImpactErrors = allFindings
-    .filter((f) => f.type === "error" && f.impact === "high" && f.recommendation)
-    .slice(0, 3)
-    .map((f) => ({
-      title: f.title,
-      description: f.recommendation,
-      estimatedImpact: "Høj – dokumenteret effekt på konverteringsraten",
+  return categories
+    .flatMap((c) => c.findings)
+    .filter((fi) => fi.type !== "success" && fi.impact === "high" && fi.recommendation)
+    .slice(0, 5)
+    .map((fi) => ({
+      title: fi.title,
+      description: fi.recommendation,
+      estimatedImpact: fi.type === "error" ? "Høj – løs dette først" : "Medium-høj – kan implementeres hurtigt",
     }));
-
-  const highImpactWarnings = allFindings
-    .filter((f) => f.type === "warning" && f.impact === "high" && f.recommendation)
-    .slice(0, 4)
-    .map((f) => ({
-      title: f.title,
-      description: f.recommendation,
-      estimatedImpact: "Medium-høj – kan typisk implementeres hurtigt",
-    }));
-
-  return [...highImpactErrors, ...highImpactWarnings].slice(0, 6);
 }
 
 function generatePrioritizedActions(categories: Category[]): string[] {
-  const allFindings = categories.flatMap((c) => c.findings);
-
-  return allFindings
-    .filter((f) => f.type !== "success" && f.recommendation)
+  return categories
+    .flatMap((c) => c.findings)
+    .filter((fi) => fi.type !== "success" && fi.recommendation)
     .sort((a, b) => {
-      const impactOrder = { high: 0, medium: 1, low: 2 };
-      const typeOrder = { error: 0, warning: 1, success: 2 };
-      return (
-        impactOrder[a.impact] - impactOrder[b.impact] ||
-        typeOrder[a.type] - typeOrder[b.type]
-      );
+      const imp = { high: 0, medium: 1, low: 2 };
+      const typ = { error: 0, warning: 1, success: 2 };
+      return imp[a.impact] - imp[b.impact] || typ[a.type] - typ[b.type];
     })
     .slice(0, 5)
-    .map((f) => f.recommendation);
+    .map((fi) => fi.recommendation);
 }
 
-function generateSummary(
-  categories: Category[],
-  overallScore: number,
-  pageType: string
-): string {
-  const errorCount = categories.reduce(
-    (a, c) => a + c.findings.filter((f) => f.type === "error").length, 0
-  );
-  const successCount = categories.reduce(
-    (a, c) => a + c.findings.filter((f) => f.type === "success").length, 0
-  );
-
+function generateSummary(categories: Category[], score: number, pageType: PageType): string {
+  const errors = categories.reduce((a, c) => a + c.findings.filter((f) => f.type === "error").length, 0);
   const weakest = [...categories].sort((a, b) => a.score - b.score)[0];
   const strongest = [...categories].sort((a, b) => b.score - a.score)[0];
 
-  let summary = `Din ${pageType} scorer ${overallScore}/100 i vores CRO-analyse. `;
-
-  if (errorCount > 0) {
-    summary += `Vi fandt ${errorCount} kritiske problemer der bør løses først. `;
-  }
-
-  summary += `Stærkeste område: ${strongest.name} (${strongest.score}/100). `;
-  summary += `Størst forbedringspotentiale: ${weakest.name} (${weakest.score}/100).`;
-
-  return summary;
+  let s = `Din ${pageType} scorer ${score}/100 i CRO-analysen. `;
+  if (errors > 0) s += `${errors} kritisk(e) problem(er) bør løses først. `;
+  s += `Stærkeste: ${strongest.name} (${strongest.score}/100). `;
+  s += `Størst potentiale: ${weakest.name} (${weakest.score}/100).`;
+  return s;
 }
 
-// ─── Main entry point ───────────────────────────────────────────
+// ─── Main ───────────────────────────────────────────────────────
 
-export function analyzeWebsite(data: ScrapedData): AnalysisResult {
+export function analyzeWebsite(data: ScrapedData, pageSpeed: PageSpeedData | null = null): AnalysisResult {
   const pageType = detectPageType(data);
+  const ctx: AnalysisContext = { data, pageType, pageSpeed };
 
   const categories: Category[] = [
-    analyzeAboveTheFold(data),
-    analyzeCTA(data),
-    analyzeSocialProof(data),
-    analyzeContent(data),
-    analyzeNavigation(data),
-    analyzeDesignUX(data),
-    analyzeMobilePerformance(data),
-    analyzeConversionElements(data),
-    analyzeFriction(data),
+    analyzeAboveTheFold(ctx),
+    analyzeCTA(ctx),
+    analyzeTrust(ctx),
+    analyzeContent(ctx),
+    analyzeNavigation(ctx),
+    analyzeDesignUX(ctx),
+    analyzePerformance(ctx),
+    analyzeConversion(ctx),
+    analyzeFriction(ctx),
   ];
 
-  const overallScore = Math.round(
-    categories.reduce((a, c) => a + c.score, 0) / categories.length
-  );
-
-  const quickWins = generateQuickWins(categories);
-  const prioritizedActions = generatePrioritizedActions(categories);
-  const summary = generateSummary(categories, overallScore, pageType);
+  const overallScore = Math.round(categories.reduce((a, c) => a + c.score, 0) / categories.length);
 
   return {
     overallScore,
     pageType,
-    summary,
+    summary: generateSummary(categories, overallScore, pageType),
     categories,
-    quickWins,
-    prioritizedActions,
+    quickWins: generateQuickWins(categories),
+    prioritizedActions: generatePrioritizedActions(categories),
   };
 }

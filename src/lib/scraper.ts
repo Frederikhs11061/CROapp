@@ -4,17 +4,41 @@ import chromium from "@sparticuz/chromium-min";
 const CHROMIUM_PACK =
   "https://github.com/Sparticuz/chromium/releases/download/v143.0.4/chromium-v143.0.4-pack.x64.tar";
 
+export type CTAInfo = {
+  text: string;
+  tag: string;
+  href?: string;
+  isAboveFold: boolean;
+  fontSize: number;
+  area: number;
+  bgColor: string;
+  textColor: string;
+  isPrimary: boolean;
+};
+
+export type TrustSignal = {
+  type: "badge" | "text" | "social_proof" | "authority";
+  description: string;
+  location: string;
+};
+
+export type HeadingInfo = {
+  tag: string;
+  text: string;
+  isAboveFold: boolean;
+};
+
 export type ScrapedData = {
   title: string;
   metaDescription: string;
   url: string;
   screenshot: string;
-  headings: { tag: string; text: string }[];
+  headings: HeadingInfo[];
   links: { text: string; href: string; isExternal: boolean }[];
-  images: { alt: string; src: string; hasAlt: boolean }[];
-  ctas: { text: string; type: string; href?: string }[];
-  forms: { fields: number; hasLabels: boolean }[];
-  socialProof: string[];
+  images: { alt: string; src: string; hasAlt: boolean; isAboveFold: boolean }[];
+  ctas: CTAInfo[];
+  forms: { fields: number; hasLabels: boolean; action?: string }[];
+  trustSignals: TrustSignal[];
   metaTags: Record<string, string>;
   performance: {
     loadTime: number;
@@ -31,7 +55,41 @@ export type ScrapedData = {
     hasVideo: boolean;
     hasTrustBadges: boolean;
     hasNewsletter: boolean;
+    hasProductGallery: boolean;
+    hasAddToCart: boolean;
+    hasCartWidget: boolean;
+    hasCheckoutForm: boolean;
+    hasFilters: boolean;
+    hasBreadcrumbs: boolean;
+    hasProgressIndicator: boolean;
     sectionCount: number;
+    navItemCount: number;
+  };
+  firstScreenContent: {
+    heroText: string;
+    heroSubtext: string;
+    visibleCTACount: number;
+    hasSocialProofAboveFold: boolean;
+    hasImageAboveFold: boolean;
+    hasVideoAboveFold: boolean;
+  };
+  copyAnalysis: {
+    valueProposition: string;
+    usps: string[];
+    benefitStatements: string[];
+    featureStatements: string[];
+    urgencyElements: string[];
+    guaranteeStatements: string[];
+  };
+  pageSignals: {
+    hasProductSchema: boolean;
+    hasBreadcrumbSchema: boolean;
+    hasOrganizationSchema: boolean;
+    priceVisible: boolean;
+    currencySymbols: string[];
+    productCount: number;
+    cartIndicators: string[];
+    checkoutIndicators: string[];
   };
   textContent: string;
   viewport: "desktop" | "mobile";
@@ -39,7 +97,6 @@ export type ScrapedData = {
 
 async function getBrowser() {
   const executablePath = await chromium.executablePath(CHROMIUM_PACK);
-
   return puppeteer.launch({
     args: chromium.args,
     defaultViewport: { width: 1440, height: 900 },
@@ -58,19 +115,14 @@ export async function scrapeWebsite(
   if (viewport === "mobile") {
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
     await page.setUserAgent(
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
     );
   } else {
     await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   }
 
   const startTime = Date.now();
-
-  await page.goto(url, {
-    waitUntil: "networkidle2",
-    timeout: 30000,
-  });
-
+  await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
   const loadTime = Date.now() - startTime;
 
   await new Promise((r) => setTimeout(r, 2000));
@@ -83,127 +135,248 @@ export async function scrapeWebsite(
   });
 
   const pageData = await page.evaluate(() => {
-    const getTextContent = (el: Element | null) =>
-      el?.textContent?.trim() ?? "";
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const getTextContent = (el: Element | null) => el?.textContent?.trim() ?? "";
 
-    const headings = Array.from(
-      document.querySelectorAll("h1, h2, h3, h4, h5, h6")
-    ).map((h) => ({
+    function isAboveFold(el: Element): boolean {
+      const rect = el.getBoundingClientRect();
+      return rect.top < vh && rect.bottom > 0;
+    }
+
+    // ─── Headings ───
+    const headings = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6")).map((h) => ({
       tag: h.tagName.toLowerCase(),
       text: getTextContent(h).slice(0, 200),
+      isAboveFold: isAboveFold(h),
     }));
 
-    const links = Array.from(document.querySelectorAll("a")).map((a) => ({
-      text: getTextContent(a).slice(0, 100),
-      href: a.href,
-      isExternal: a.hostname !== window.location.hostname,
-    }));
+    // ─── Links ───
+    const links = Array.from(document.querySelectorAll("a"))
+      .slice(0, 100)
+      .map((a) => ({
+        text: getTextContent(a).slice(0, 100),
+        href: a.href,
+        isExternal: a.hostname !== window.location.hostname,
+      }));
 
-    const images = Array.from(document.querySelectorAll("img")).map((img) => ({
-      alt: img.alt,
-      src: img.src,
-      hasAlt: !!img.alt && img.alt.length > 0,
-    }));
+    // ─── Images ───
+    const images = Array.from(document.querySelectorAll("img"))
+      .slice(0, 50)
+      .map((img) => ({
+        alt: img.alt,
+        src: img.src,
+        hasAlt: !!img.alt && img.alt.length > 0,
+        isAboveFold: isAboveFold(img),
+      }));
 
-    const buttonTexts = Array.from(
-      document.querySelectorAll(
-        'button, a.btn, a.button, [class*="cta"], [class*="btn"], input[type="submit"]'
-      )
-    ).map((el) => ({
-      text: getTextContent(el).slice(0, 100),
-      type: el.tagName.toLowerCase(),
-      href: (el as HTMLAnchorElement).href || undefined,
-    }));
+    // ─── CTAs (deep analysis) ───
+    const ctaSelectors = 'button, a.btn, a.button, [class*="cta"], [class*="btn"], [class*="button"], input[type="submit"], [role="button"]';
+    const ctas: CTAInfo[] = Array.from(document.querySelectorAll(ctaSelectors))
+      .slice(0, 30)
+      .map((el) => {
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return {
+          text: getTextContent(el).slice(0, 100),
+          tag: el.tagName.toLowerCase(),
+          href: (el as HTMLAnchorElement).href || undefined,
+          isAboveFold: isAboveFold(el),
+          fontSize: parseFloat(style.fontSize) || 0,
+          area: rect.width * rect.height,
+          bgColor: style.backgroundColor,
+          textColor: style.color,
+          isPrimary: rect.width > 120 && rect.height > 35 && parseFloat(style.fontSize) >= 14,
+        };
+      })
+      .filter((c) => c.text.length > 0);
 
+    // ─── Forms ───
     const forms = Array.from(document.querySelectorAll("form")).map((form) => ({
-      fields: form.querySelectorAll("input, select, textarea").length,
+      fields: form.querySelectorAll("input:not([type=hidden]), select, textarea").length,
       hasLabels: form.querySelectorAll("label").length > 0,
+      action: form.action || undefined,
     }));
 
-    const bodyText = document.body?.innerText ?? "";
-    const socialProofKeywords = [
-      "trustpilot",
-      "anmeldelse",
-      "review",
-      "kunderne siger",
-      "testimonial",
-      "stjerner",
-      "stars",
-      "rating",
-      "kunder",
-      "customers",
-      "trusted by",
-      "as seen",
-      "featured in",
-    ];
-    const socialProof = socialProofKeywords.filter((kw) =>
-      bodyText.toLowerCase().includes(kw)
-    );
+    // ─── Trust Signals (differentiated) ───
+    const trustSignals: TrustSignal[] = [];
+    const bodyText = document.body?.innerText?.toLowerCase() ?? "";
 
+    // Badge-type trust
+    const badgeEls = document.querySelectorAll('[class*="trust"], [class*="badge"], [class*="secure"], [class*="guarantee"], [class*="sikker"], [class*="e-maerket"], [class*="verified"]');
+    if (badgeEls.length > 0) {
+      trustSignals.push({ type: "badge", description: `${badgeEls.length} visuelle trust badge(s) fundet`, location: "side" });
+    }
+
+    // Text-based trust
+    const trustTexts: [string, string][] = [
+      ["garanti", "Garanti nævnt"], ["returret", "Returret nævnt"], ["pengene tilbage", "Pengene-tilbage-garanti"],
+      ["gratis fragt", "Gratis fragt"], ["fri fragt", "Fri fragt"], ["gratis levering", "Gratis levering"],
+      ["free shipping", "Free shipping"], ["sikker betaling", "Sikker betaling"], ["ssl", "SSL nævnt"],
+      ["30 dag", "30 dages garanti/retur"], ["14 dag", "14 dages fortrydelsesret"],
+      ["money back", "Money back guarantee"], ["ombytning", "Ombytning nævnt"],
+    ];
+    for (const [kw, desc] of trustTexts) {
+      if (bodyText.includes(kw)) trustSignals.push({ type: "text", description: desc, location: "tekst" });
+    }
+
+    // Social proof
+    const spKeywords: [string, string][] = [
+      ["trustpilot", "Trustpilot"], ["anmeldelse", "Anmeldelser"], ["review", "Reviews"],
+      ["kunderne siger", "Kundecitater"], ["testimonial", "Testimonials"],
+      ["stjerner", "Stjernerating"], ["rating", "Ratings"], ["★", "Stjernesymboler"],
+    ];
+    for (const [kw, desc] of spKeywords) {
+      if (bodyText.includes(kw)) trustSignals.push({ type: "social_proof", description: desc, location: "side" });
+    }
+
+    // Authority
+    const authKeywords: [string, string][] = [
+      ["as seen", "As seen in"], ["featured in", "Featured in"], ["partner", "Partner-logoer"],
+      ["award", "Awards"], ["certificer", "Certificering"], ["akkrediter", "Akkreditering"],
+      ["+13 års", "Erfaring nævnt"], ["erfaring", "Erfaring nævnt"],
+    ];
+    for (const [kw, desc] of authKeywords) {
+      if (bodyText.includes(kw)) trustSignals.push({ type: "authority", description: desc, location: "side" });
+    }
+
+    // ─── Meta tags ───
     const metaTags: Record<string, string> = {};
-    document.querySelectorAll("meta").forEach((meta) => {
-      const name =
-        meta.getAttribute("name") || meta.getAttribute("property") || "";
-      const content = meta.getAttribute("content") || "";
+    document.querySelectorAll("meta").forEach((m) => {
+      const name = m.getAttribute("name") || m.getAttribute("property") || "";
+      const content = m.getAttribute("content") || "";
       if (name && content) metaTags[name] = content.slice(0, 300);
     });
 
-    const nav = document.querySelector("nav, [role='navigation']");
-    const footer = document.querySelector("footer");
-    const hero = document.querySelector(
-      '[class*="hero"], [class*="banner"], [class*="jumbotron"]'
-    );
-    const faq = document.querySelector(
-      '[class*="faq"], [class*="accordion"], [id*="faq"]'
-    );
-    const testimonials = document.querySelector(
-      '[class*="testimonial"], [class*="review"], [class*="trustpilot"]'
-    );
-    const pricing = document.querySelector(
-      '[class*="pricing"], [class*="price"], [class*="plan"]'
-    );
-    const video = document.querySelector("video, iframe[src*='youtube'], iframe[src*='vimeo']");
-    const trustBadges = document.querySelector(
-      '[class*="trust"], [class*="badge"], [class*="secure"], [class*="guarantee"]'
-    );
-    const newsletter = document.querySelector(
-      '[class*="newsletter"], [class*="subscribe"], [class*="signup"]'
-    );
-    const sections = document.querySelectorAll("section");
+    // ─── Structural info (much broader detection) ───
+    const nav = document.querySelector("nav, [role='navigation'], header");
+    const navItems = nav ? nav.querySelectorAll("a").length : 0;
+    const footer = document.querySelector("footer, [class*='footer']");
+
+    const heroSelectors = '[class*="hero"], [class*="banner"], [class*="jumbotron"], [class*="splash"], [class*="intro"], [class*="masthead"], [class*="slider"], [class*="carousel"], [class*="slideshow"]';
+    const hasHero = !!document.querySelector(heroSelectors);
+    const firstSection = document.querySelector("main > section, main > div > section, body > section, [class*='section']:first-of-type");
+    const firstSectionHasLargeImg = firstSection ? !!firstSection.querySelector("img[width], img[class*='hero'], img[class*='banner'], picture") : false;
+    const heroDetected = hasHero || firstSectionHasLargeImg;
+
+    const hasFAQ = !!document.querySelector('[class*="faq"], [class*="accordion"], [id*="faq"], details, [itemtype*="FAQPage"]');
+    const hasTestimonials = !!document.querySelector('[class*="testimonial"], [class*="review"], [class*="trustpilot"], [class*="kunde"], [class*="quote"]');
+    const hasPricing = !!document.querySelector('[class*="pricing"], [class*="price"], [class*="pris"], .money, [class*="plan"]');
+    const hasVideo = !!document.querySelector("video, iframe[src*='youtube'], iframe[src*='vimeo'], [class*='video']");
+    const hasTrustBadges = badgeEls.length > 0;
+    const hasNewsletter = !!document.querySelector('[class*="newsletter"], [class*="subscribe"], [class*="signup"], [class*="nyhedsbrev"], [class*="mailchimp"], [class*="klaviyo"]');
+    const hasProductGallery = !!document.querySelector('[class*="product-image"], [class*="gallery"], [class*="product-photo"], [class*="product-media"]');
+    const hasAddToCart = !!document.querySelector('[class*="add-to-cart"], [class*="addtocart"], [class*="buy-button"], form[action*="cart"]');
+    const hasCartWidget = !!document.querySelector('[class*="cart"], [class*="basket"], [class*="kurv"], [href*="/cart"]');
+    const hasCheckoutForm = !!document.querySelector('[class*="checkout"], form[action*="checkout"], [class*="payment"]');
+    const hasFilters = !!document.querySelector('[class*="filter"], [class*="facet"], [class*="sort"], [class*="refine"]');
+    const hasBreadcrumbs = !!document.querySelector('[class*="breadcrumb"], nav[aria-label*="breadcrumb"], [itemtype*="BreadcrumbList"]');
+    const hasProgressIndicator = !!document.querySelector('[class*="progress"], [class*="step-indicator"], [class*="stepper"]');
+    const sectionCount = document.querySelectorAll("section, [class*='section']").length;
+
+    // ─── First screen content ───
+    const h1s = headings.filter((h) => h.tag === "h1" && h.isAboveFold);
+    const heroText = h1s[0]?.text ?? "";
+    const heroSubEl = h1s[0] ? document.querySelector("h1")?.nextElementSibling : null;
+    const heroSubtext = heroSubEl && isAboveFold(heroSubEl) ? getTextContent(heroSubEl).slice(0, 300) : "";
+    const visibleCTACount = ctas.filter((c) => c.isAboveFold).length;
+    const socialProofAbove = trustSignals.some((t) => t.type === "social_proof");
+    const imageAbove = images.some((i) => i.isAboveFold);
+
+    // ─── Copy analysis ───
+    const allText = document.body?.innerText ?? "";
+    const sentences = allText.split(/[.!?\n]+/).map((s) => s.trim()).filter((s) => s.length > 10 && s.length < 300);
+
+    const benefitWords = /spar|gratis|hurtig|nem|bedste|eksklusiv|populær|anbefal|favorit|save|free|fast|easy|best|exclusive|popular|proven|guaranteed|opnå|forbedre|boost|øg|reducer|minimer|undgå|slip for|uden/i;
+    const featureWords = /lavet af|materiale|størrelse|mål|teknisk|specifikation|funktion|inkluderer|indeholder|built with|made from|features|includes|dimensions/i;
+    const urgencyWords = /nu\b|i dag|begrænset|kun \d|sidste|snart|udløber|skyndig|limited|today|only \d|last|ending|expires|few left|hurry/i;
+
+    const benefitStatements = sentences.filter((s) => benefitWords.test(s)).slice(0, 5);
+    const featureStatements = sentences.filter((s) => featureWords.test(s)).slice(0, 5);
+    const urgencyElements = sentences.filter((s) => urgencyWords.test(s)).slice(0, 3);
+
+    const guaranteeWords = /garanti|guarantee|money.?back|pengene.?tilbage|returret|return|refund|bytte|ombytning/i;
+    const guaranteeStatements = sentences.filter((s) => guaranteeWords.test(s)).slice(0, 3);
+
+    const usps: string[] = [];
+    document.querySelectorAll('[class*="usp"], [class*="benefit"], [class*="feature-list"] li, [class*="value-prop"]').forEach((el) => {
+      const t = getTextContent(el);
+      if (t.length > 5 && t.length < 200) usps.push(t);
+    });
+
+    // ─── Page signals for type detection ───
+    const hasProductSchema = !!document.querySelector('[itemtype*="Product"], [type="application/ld+json"]');
+    const hasBreadcrumbSchema = !!document.querySelector('[itemtype*="BreadcrumbList"]');
+    const hasOrgSchema = !!document.querySelector('[itemtype*="Organization"]');
+    const priceVisible = /\d+[.,]\d{2}\s*(kr|dkk|€|\$|,-)/i.test(allText.slice(0, 3000));
+    const currencyMatches = allText.match(/(kr\.?|dkk|€|\$|,-)/gi) || [];
+    const currencySymbols = [...new Set(currencyMatches.map((c) => c.toLowerCase()))];
+    const productGridItems = document.querySelectorAll('[class*="product-card"], [class*="product-item"], [class*="product-grid"] > *, [class*="collection-product"]');
+    const cartIndicators = Array.from(document.querySelectorAll('[class*="cart"], [class*="kurv"], [class*="basket"]')).map((e) => e.className).slice(0, 5);
+    const checkoutIndicators = Array.from(document.querySelectorAll('[class*="checkout"], [class*="payment"], [class*="order-summary"]')).map((e) => e.className).slice(0, 5);
 
     return {
       title: document.title,
-      metaDescription:
-        metaTags["description"] ||
-        metaTags["og:description"] ||
-        "",
+      metaDescription: metaTags["description"] || metaTags["og:description"] || "",
       headings,
-      links: links.slice(0, 100),
-      images: images.slice(0, 50),
-      ctas: buttonTexts.slice(0, 30),
+      links,
+      images,
+      ctas,
       forms,
-      socialProof,
+      trustSignals,
       metaTags,
       structuralInfo: {
         hasNav: !!nav,
         hasFooter: !!footer,
-        hasHero: !!hero,
-        hasFAQ: !!faq,
-        hasTestimonials: !!testimonials,
-        hasPricing: !!pricing,
-        hasVideo: !!video,
-        hasTrustBadges: !!trustBadges,
-        hasNewsletter: !!newsletter,
-        sectionCount: sections.length,
+        hasHero: heroDetected,
+        hasFAQ,
+        hasTestimonials,
+        hasPricing,
+        hasVideo,
+        hasTrustBadges,
+        hasNewsletter,
+        hasProductGallery,
+        hasAddToCart,
+        hasCartWidget,
+        hasCheckoutForm,
+        hasFilters,
+        hasBreadcrumbs,
+        hasProgressIndicator,
+        sectionCount,
+        navItemCount: navItems,
       },
-      textContent: bodyText.slice(0, 8000),
+      firstScreenContent: {
+        heroText,
+        heroSubtext,
+        visibleCTACount,
+        hasSocialProofAboveFold: socialProofAbove,
+        hasImageAboveFold: imageAbove,
+        hasVideoAboveFold: hasVideo && !!document.querySelector("video, iframe[src*='youtube']"),
+      },
+      copyAnalysis: {
+        valueProposition: heroText,
+        usps: usps.slice(0, 5),
+        benefitStatements,
+        featureStatements,
+        urgencyElements,
+        guaranteeStatements,
+      },
+      pageSignals: {
+        hasProductSchema,
+        hasBreadcrumbSchema,
+        hasOrganizationSchema: hasOrgSchema,
+        priceVisible,
+        currencySymbols,
+        productCount: productGridItems.length,
+        cartIndicators,
+        checkoutIndicators,
+      },
+      textContent: allText.slice(0, 8000),
     };
   });
 
   const performanceTiming = await page.evaluate(() => {
-    const perf = performance.getEntriesByType(
-      "navigation"
-    )[0] as PerformanceNavigationTiming;
+    const perf = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming;
     return {
       domContentLoaded: Math.round(perf?.domContentLoadedEventEnd ?? 0),
       resourceCount: performance.getEntriesByType("resource").length,
@@ -216,10 +389,53 @@ export async function scrapeWebsite(
     ...pageData,
     url,
     screenshot: `data:image/jpeg;base64,${screenshot}`,
-    performance: {
-      loadTime,
-      ...performanceTiming,
-    },
+    performance: { loadTime, ...performanceTiming },
     viewport,
   };
+}
+
+// ─── PageSpeed Insights (real Lighthouse data) ──────────────────
+
+export type PageSpeedData = {
+  performanceScore: number;
+  fcp: number;
+  lcp: number;
+  cls: number;
+  tbt: number;
+  si: number;
+  ttfb: number;
+  totalRequestCount: number;
+  totalByteWeight: number;
+  strategy: string;
+};
+
+export async function fetchPageSpeed(
+  url: string,
+  strategy: "mobile" | "desktop" = "mobile"
+): Promise<PageSpeedData | null> {
+  try {
+    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=${strategy}&category=performance`;
+    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    const lhr = data.lighthouseResult;
+    if (!lhr) return null;
+
+    const audits = lhr.audits || {};
+    return {
+      performanceScore: Math.round((lhr.categories?.performance?.score ?? 0) * 100),
+      fcp: audits["first-contentful-paint"]?.numericValue ?? 0,
+      lcp: audits["largest-contentful-paint"]?.numericValue ?? 0,
+      cls: audits["cumulative-layout-shift"]?.numericValue ?? 0,
+      tbt: audits["total-blocking-time"]?.numericValue ?? 0,
+      si: audits["speed-index"]?.numericValue ?? 0,
+      ttfb: audits["server-response-time"]?.numericValue ?? 0,
+      totalRequestCount: audits["network-requests"]?.details?.items?.length ?? 0,
+      totalByteWeight: audits["total-byte-weight"]?.numericValue ?? 0,
+      strategy,
+    };
+  } catch {
+    return null;
+  }
 }
