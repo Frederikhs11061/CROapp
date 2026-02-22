@@ -51,6 +51,8 @@ export default function ResultsClient() {
     "overview" | "category" | "actions" | "ab-tests" | "benchmark" | "technical"
   >("overview");
   const [categoryIndex, setCategoryIndex] = useState(0);
+  const [techSubTab, setTechSubTab] = useState<"speed" | "security">("speed");
+  const [speedDevice, setSpeedDevice] = useState<"desktop" | "mobile">("desktop");
 
   useEffect(() => {
     const stored = sessionStorage.getItem("cro-analysis");
@@ -340,316 +342,265 @@ export default function ResultsClient() {
           if (!th) return (
             <div className="glass-card rounded-2xl p-8 text-center">
               <Gauge className="w-8 h-8 text-neutral-500 mx-auto mb-3" />
-              <p className="text-neutral-400 mb-2">Google PageSpeed data kunne ikke hentes for denne analyse.</p>
-              <p className="text-neutral-500 text-xs">Dette kan skyldes rate-limiting fra Google. Kør en ny analyse for at prøve igen.</p>
+              <p className="text-neutral-400 mb-2">Teknisk data kunne ikke hentes for denne analyse.</p>
+              <p className="text-neutral-500 text-xs">Kør en ny analyse for at prøve igen.</p>
             </div>
           );
 
-          const ratingColor = (r: string) =>
-            r === "good" ? "text-green-400" : r === "needs-improvement" ? "text-yellow-400" : "text-red-400";
-          const ratingBg = (r: string) =>
-            r === "good" ? "bg-green-500/10 border-green-500/20" : r === "needs-improvement" ? "bg-yellow-500/10 border-yellow-500/20" : "bg-red-500/10 border-red-500/20";
-          const ratingLabel = (r: string) =>
-            r === "good" ? "God" : r === "needs-improvement" ? "Kan forbedres" : "Dårlig";
+          const ratingColor = (r: string) => r === "good" ? "text-green-400" : r === "needs-improvement" ? "text-yellow-400" : "text-red-400";
+          const ratingBg = (r: string) => r === "good" ? "bg-green-500/10 border-green-500/20" : r === "needs-improvement" ? "bg-yellow-500/10 border-yellow-500/20" : "bg-red-500/10 border-red-500/20";
+          const ratingLabel = (r: string) => r === "good" ? "God" : r === "needs-improvement" ? "Kan forbedres" : "Dårlig";
+          const scoreColor = (s: number) => s >= 90 ? "text-green-400" : s >= 50 ? "text-yellow-400" : "text-red-400";
+          const scoreBg = (s: number) => s >= 90 ? "bg-green-500/10 border-green-500/20" : s >= 50 ? "bg-yellow-500/10 border-yellow-500/20" : "bg-red-500/10 border-red-500/20";
+          const riskColor = (r: string) => r === "low" ? "text-green-400" : r === "medium" ? "text-yellow-400" : r === "high" ? "text-red-400" : "text-red-500";
+          const riskLabel = (r: string) => r === "low" ? "Lav" : r === "medium" ? "Medium" : r === "high" ? "Høj" : "Kritisk";
+          const statusIcon = (s: string) => s === "pass" ? <CheckCircle2 className="w-4 h-4 text-green-400" /> : s === "fail" ? <XCircle className="w-4 h-4 text-red-400" /> : s === "info" ? <Info className="w-4 h-4 text-blue-400" /> : <AlertTriangle className="w-4 h-4 text-yellow-400" />;
 
-          const scoreColor = (s: number) =>
-            s >= 90 ? "text-green-400" : s >= 50 ? "text-yellow-400" : "text-red-400";
-          const scoreBg = (s: number) =>
-            s >= 90 ? "bg-green-500/10 border-green-500/20" : s >= 50 ? "bg-yellow-500/10 border-yellow-500/20" : "bg-red-500/10 border-red-500/20";
+          const speed = speedDevice === "desktop" ? th.desktop : th.mobile;
+          const sec = th.security;
 
           return (
             <div className="space-y-6">
-              {/* Lighthouse scores overview */}
-              <section className="glass-card rounded-2xl p-6 sm:p-8">
-                <div className="flex items-center gap-3 mb-1">
-                  <Gauge className="w-5 h-5 text-orange-400" />
-                  <h2 className="text-lg sm:text-xl font-bold">Google Lighthouse Scores</h2>
-                </div>
-                <p className="text-neutral-400 text-xs sm:text-sm mb-6">
-                  Realtidsdata fra Google PageSpeed Insights ({th.performanceScore >= 0 ? "desktop" : "N/A"}-strategi).
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                  {[
-                    { label: "Performance", score: th.performanceScore },
-                    { label: "Tilgængelighed", score: th.accessibilityScore },
-                    { label: "Best Practices", score: th.bestPracticesScore },
-                    { label: "SEO", score: th.seoScore },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className={`p-4 sm:p-5 rounded-xl border text-center ${scoreBg(item.score)}`}
-                    >
-                      <div className={`text-2xl sm:text-3xl font-bold ${scoreColor(item.score)}`}>
-                        {item.score}
-                      </div>
-                      <div className="text-xs text-neutral-400 mt-1">{item.label}</div>
-                    </div>
-                  ))}
-                </div>
-              </section>
+              {/* Sub-tab navigation */}
+              <div className="flex gap-2 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                <button onClick={() => setTechSubTab("speed")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${techSubTab === "speed" ? "bg-orange-500/15 text-orange-400 border border-orange-500/30" : "text-neutral-400 hover:text-white"}`}>
+                  <Gauge className="w-4 h-4" /> Hastighed
+                </button>
+                <button onClick={() => setTechSubTab("security")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${techSubTab === "security" ? "bg-orange-500/15 text-orange-400 border border-orange-500/30" : "text-neutral-400 hover:text-white"}`}>
+                  <Shield className="w-4 h-4" /> Sikkerhed
+                </button>
+              </div>
 
-              {/* Core Web Vitals */}
-              <section className="glass-card rounded-2xl p-6 sm:p-8">
-                <div className="flex items-center gap-3 mb-1">
-                  <Clock className="w-5 h-5 text-orange-400" />
-                  <h2 className="text-lg sm:text-xl font-bold">Core Web Vitals</h2>
-                </div>
-                <p className="text-neutral-400 text-xs sm:text-sm mb-6">
-                  Googles vigtigste hastigheds- og brugeroplevelsesmetrikker. Klik for at se forklaringer og løsninger.
-                </p>
-                <div className="space-y-3">
-                  {th.coreWebVitals.map((v) => (
-                    <details
-                      key={v.metric}
-                      className={`rounded-xl border overflow-hidden ${ratingBg(v.rating)}`}
-                      open={v.rating === "poor"}
-                    >
-                      <summary className="p-4 cursor-pointer list-none">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider">{v.metric}</span>
-                                <span className="text-[10px] text-neutral-500 hidden sm:inline">({v.fullName})</span>
-                              </div>
-                              <div className={`text-xl font-bold mt-0.5 ${ratingColor(v.rating)}`}>{v.value}</div>
+              {/* ═══ SPEED TAB ═══ */}
+              {techSubTab === "speed" && (
+                <div className="space-y-6">
+                  {/* Device toggle */}
+                  <div className="flex gap-2 justify-center">
+                    {(["desktop", "mobile"] as const).map((d) => {
+                      const s = d === "desktop" ? th.desktop : th.mobile;
+                      return (
+                        <button key={d} onClick={() => setSpeedDevice(d)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${speedDevice === d ? "bg-white/10 text-white border border-white/20" : "text-neutral-500 hover:text-neutral-300"}`}>
+                          {d === "desktop" ? "🖥️ Desktop" : "📱 Mobil"}
+                          {s && <span className={`font-bold ${scoreColor(s.performanceScore)}`}>{s.performanceScore}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {!speed ? (
+                    <div className="glass-card rounded-2xl p-8 text-center">
+                      <p className="text-neutral-400 text-sm">PageSpeed data for {speedDevice} er ikke tilgængelig.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Lighthouse scores */}
+                      <section className="glass-card rounded-2xl p-6 sm:p-8">
+                        <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Gauge className="w-5 h-5 text-orange-400" /> Lighthouse Scores ({speedDevice})</h2>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {[
+                            { label: "Performance", score: speed.performanceScore },
+                            { label: "Tilgængelighed", score: speed.accessibilityScore },
+                            { label: "Best Practices", score: speed.bestPracticesScore },
+                            { label: "SEO", score: speed.seoScore },
+                          ].map((item) => (
+                            <div key={item.label} className={`p-4 rounded-xl border text-center ${scoreBg(item.score)}`}>
+                              <div className={`text-2xl font-bold ${scoreColor(item.score)}`}>{item.score}</div>
+                              <div className="text-xs text-neutral-400 mt-1">{item.label}</div>
                             </div>
+                          ))}
+                        </div>
+                      </section>
+
+                      {/* Core Web Vitals */}
+                      <section className="glass-card rounded-2xl p-6 sm:p-8">
+                        <h2 className="text-lg font-bold mb-1 flex items-center gap-2"><Clock className="w-5 h-5 text-orange-400" /> Core Web Vitals</h2>
+                        <p className="text-neutral-400 text-xs mb-5">Klik for forklaringer og løsninger.</p>
+                        <div className="space-y-3">
+                          {speed.coreWebVitals.map((v) => (
+                            <details key={v.metric} className={`rounded-xl border overflow-hidden ${ratingBg(v.rating)}`} open={v.rating === "poor"}>
+                              <summary className="p-4 cursor-pointer list-none">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider">{v.metric}</span>
+                                      <span className="text-[10px] text-neutral-500 hidden sm:inline">({v.fullName})</span>
+                                    </div>
+                                    <div className={`text-xl font-bold mt-0.5 ${ratingColor(v.rating)}`}>{v.value}</div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] text-neutral-500">Mål: {v.threshold}</span>
+                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${v.rating === "good" ? "bg-green-500/20 text-green-400" : v.rating === "needs-improvement" ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"}`}>{ratingLabel(v.rating)}</span>
+                                  </div>
+                                </div>
+                              </summary>
+                              <div className="px-4 pb-4 border-t border-white/[0.05] pt-3 space-y-3">
+                                <p className="text-xs text-neutral-300 leading-relaxed">{v.explanation}</p>
+                                {v.rating !== "good" && v.howToFix.length > 0 && (
+                                  <div>
+                                    <p className="text-[11px] font-bold text-orange-400 uppercase tracking-wider mb-1.5">Sådan forbedrer du det:</p>
+                                    <ul className="space-y-1">
+                                      {v.howToFix.map((fix, i) => (
+                                        <li key={i} className="flex items-start gap-2 text-xs text-neutral-300"><span className="text-orange-400 mt-0.5 shrink-0">→</span>{fix}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      </section>
+
+                      {/* Opportunities */}
+                      {speed.opportunities.length > 0 && (
+                        <section className="glass-card rounded-2xl p-6 sm:p-8">
+                          <h2 className="text-lg font-bold mb-1 flex items-center gap-2"><Zap className="w-5 h-5 text-orange-400" /> Forbedringsmuligheder</h2>
+                          <p className="text-neutral-400 text-xs mb-5">Estimerede besparelser fra Google Lighthouse.</p>
+                          <div className="space-y-2">
+                            {speed.opportunities.map((opp, i) => (
+                              <details key={i} className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                                <summary className="flex items-center justify-between cursor-pointer list-none">
+                                  <div className="flex items-center gap-2 min-w-0"><AlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0" /><span className="text-sm font-medium truncate">{opp.title}</span></div>
+                                  {opp.displayValue && <span className="text-xs text-orange-400 font-bold shrink-0 ml-2 px-2 py-0.5 rounded bg-orange-500/10">{opp.displayValue}</span>}
+                                </summary>
+                                <p className="text-xs text-neutral-400 mt-2 ml-6">{opp.description}</p>
+                              </details>
+                            ))}
                           </div>
+                        </section>
+                      )}
+
+                      {/* Diagnostics */}
+                      {speed.diagnostics.length > 0 && (
+                        <section className="glass-card rounded-2xl p-6 sm:p-8">
+                          <h2 className="text-lg font-bold mb-1 flex items-center gap-2"><Info className="w-5 h-5 text-orange-400" /> Diagnostik</h2>
+                          <p className="text-neutral-400 text-xs mb-5">Yderligere information om sidens tekniske sundhed.</p>
+                          <div className="space-y-2">
+                            {speed.diagnostics.map((diag, i) => (
+                              <details key={i} className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                                <summary className="flex items-center justify-between cursor-pointer list-none">
+                                  <div className="flex items-center gap-2 min-w-0"><Info className="w-3.5 h-3.5 text-neutral-500 shrink-0" /><span className="text-sm font-medium truncate">{diag.title}</span></div>
+                                  {diag.displayValue && <span className="text-xs text-neutral-400 font-semibold shrink-0 ml-2">{diag.displayValue}</span>}
+                                </summary>
+                                <p className="text-xs text-neutral-400 mt-2 ml-6">{diag.description}</p>
+                              </details>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {/* A11y, SEO, BP issues */}
+                      {speed.a11yIssues.length > 0 && (
+                        <section className="glass-card rounded-2xl p-6 sm:p-8">
+                          <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold flex items-center gap-2">♿ Tilgængelighedsproblemer</h2>
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${scoreBg(speed.accessibilityScore)} ${scoreColor(speed.accessibilityScore)}`}>{speed.accessibilityScore}/100</span>
+                          </div>
+                          <div className="space-y-2">
+                            {speed.a11yIssues.map((issue, i) => (
+                              <details key={i} className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                                <summary className="flex items-center gap-2 cursor-pointer list-none"><XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" /><span className="text-sm font-medium">{issue.title}</span></summary>
+                                <p className="text-xs text-neutral-400 mt-2 ml-6">{issue.description}</p>
+                              </details>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+                      {speed.seoIssues.length > 0 && (
+                        <section className="glass-card rounded-2xl p-6 sm:p-8">
+                          <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold flex items-center gap-2">🔍 SEO-problemer</h2>
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${scoreBg(speed.seoScore)} ${scoreColor(speed.seoScore)}`}>{speed.seoScore}/100</span>
+                          </div>
+                          <div className="space-y-2">
+                            {speed.seoIssues.map((issue, i) => (
+                              <details key={i} className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                                <summary className="flex items-center gap-2 cursor-pointer list-none"><AlertTriangle className="w-3.5 h-3.5 text-yellow-400 shrink-0" /><span className="text-sm font-medium">{issue.title}</span></summary>
+                                <p className="text-xs text-neutral-400 mt-2 ml-6">{issue.description}</p>
+                              </details>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {speed.passedCount > 0 && (
+                        <div className="flex items-center gap-2 p-4 rounded-xl bg-green-500/5 border border-green-500/10">
+                          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                          <span className="text-sm text-green-300">{speed.passedCount} Lighthouse-audits bestået</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ═══ SECURITY TAB ═══ */}
+              {techSubTab === "security" && sec && (
+                <div className="space-y-6">
+                  {/* Score overview */}
+                  <section className="glass-card rounded-2xl p-6 sm:p-8">
+                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-orange-400" /> Sikkerhedsoversigt</h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                      <div className={`p-4 rounded-xl border text-center ${scoreBg(sec.securityScore)}`}>
+                        <div className={`text-2xl font-bold ${scoreColor(sec.securityScore)}`}>{sec.securityScore}</div>
+                        <div className="text-xs text-neutral-400 mt-1">Sikkerhed</div>
+                      </div>
+                      <div className={`p-4 rounded-xl border text-center ${scoreBg(sec.privacyScore)}`}>
+                        <div className={`text-2xl font-bold ${scoreColor(sec.privacyScore)}`}>{sec.privacyScore}</div>
+                        <div className="text-xs text-neutral-400 mt-1">GDPR / Privatliv</div>
+                      </div>
+                      <div className={`p-4 rounded-xl border text-center ${scoreBg(sec.infrastructureScore)}`}>
+                        <div className={`text-2xl font-bold ${scoreColor(sec.infrastructureScore)}`}>{sec.infrastructureScore}</div>
+                        <div className="text-xs text-neutral-400 mt-1">Infrastruktur</div>
+                      </div>
+                      <div className="p-4 rounded-xl border border-white/10 text-center">
+                        <div className={`text-2xl font-bold ${riskColor(sec.overallRisk)}`}>{riskLabel(sec.overallRisk)}</div>
+                        <div className="text-xs text-neutral-400 mt-1">Risikoniveau</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Security categories */}
+                  {sec.categories.map((cat) => {
+                    const fails = cat.checks.filter((c) => c.status === "fail").length;
+                    const warns = cat.checks.filter((c) => c.status === "warning").length;
+                    return (
+                      <section key={cat.name} className="glass-card rounded-2xl p-6 sm:p-8">
+                        <div className="flex items-center justify-between mb-4">
+                          <h2 className="text-base sm:text-lg font-bold flex items-center gap-2">
+                            <span aria-hidden="true">{cat.icon}</span> {cat.name}
+                          </h2>
                           <div className="flex items-center gap-2">
-                            <span className="text-[11px] text-neutral-500">Mål: {v.threshold}</span>
-                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                              v.rating === "good" ? "bg-green-500/20 text-green-400" :
-                              v.rating === "needs-improvement" ? "bg-yellow-500/20 text-yellow-400" :
-                              "bg-red-500/20 text-red-400"
-                            }`}>{ratingLabel(v.rating)}</span>
+                            {fails > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-400">{fails} fejl</span>}
+                            {warns > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400">{warns} advarsler</span>}
+                            {fails === 0 && warns === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">OK</span>}
                           </div>
                         </div>
-                      </summary>
-                      <div className="px-4 pb-4 border-t border-white/[0.05] pt-3 space-y-3">
-                        <p className="text-xs text-neutral-300 leading-relaxed">{v.explanation}</p>
-                        {v.rating !== "good" && v.howToFix.length > 0 && (
-                          <div>
-                            <p className="text-[11px] font-bold text-orange-400 uppercase tracking-wider mb-1.5">Sådan forbedrer du det:</p>
-                            <ul className="space-y-1">
-                              {v.howToFix.map((fix, i) => (
-                                <li key={i} className="flex items-start gap-2 text-xs text-neutral-300">
-                                  <span className="text-orange-400 mt-0.5 shrink-0">→</span>
-                                  {fix}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              </section>
-
-              {/* Security & Technical Checks */}
-              <section className="glass-card rounded-2xl p-6 sm:p-8">
-                <div className="flex items-center gap-3 mb-1">
-                  <Shield className="w-5 h-5 text-orange-400" />
-                  <h2 className="text-lg sm:text-xl font-bold">Sikkerhed & Teknisk Sundhed</h2>
-                </div>
-                <p className="text-neutral-400 text-xs sm:text-sm mb-6">
-                  SSL, GDPR, tilgængelighed og tekniske grundkrav.
-                </p>
-                <div className="space-y-2">
-                  {th.checks.map((check) => (
-                    <div
-                      key={check.label}
-                      className="flex items-start gap-3 p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] transition-colors"
-                    >
-                      <div className="mt-0.5 shrink-0">
-                        {check.status === "pass" ? (
-                          <CheckCircle2 className="w-4 h-4 text-green-400" />
-                        ) : check.status === "fail" ? (
-                          <XCircle className="w-4 h-4 text-red-400" />
-                        ) : (
-                          <AlertTriangle className="w-4 h-4 text-yellow-400" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium">{check.label}</span>
-                          <span className={`text-xs font-semibold ${
-                            check.status === "pass" ? "text-green-400" :
-                            check.status === "fail" ? "text-red-400" :
-                            "text-yellow-400"
-                          }`}>{check.value}</span>
+                        <div className="space-y-2">
+                          {cat.checks.map((check, i) => (
+                            <div key={i} className="flex items-start gap-3 p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                              <div className="mt-0.5 shrink-0">{statusIcon(check.status)}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-medium">{check.label}</span>
+                                  <span className={`text-xs font-semibold ${check.status === "pass" ? "text-green-400" : check.status === "fail" ? "text-red-400" : check.status === "info" ? "text-blue-400" : "text-yellow-400"}`}>{check.value}</span>
+                                  {check.risk !== "none" && <span className={`text-[10px] px-1.5 py-0.5 rounded ${check.risk === "high" ? "bg-red-500/15 text-red-400" : check.risk === "medium" ? "bg-yellow-500/15 text-yellow-400" : "bg-blue-500/15 text-blue-400"}`}>Risiko: {check.risk === "high" ? "Høj" : check.risk === "medium" ? "Medium" : "Lav"}</span>}
+                                </div>
+                                {check.detail && <p className="text-xs text-neutral-500 mt-0.5">{check.detail}</p>}
+                                {check.howToFix && <p className="text-xs text-orange-400/80 mt-1 flex items-start gap-1"><span className="shrink-0">→</span>{check.howToFix}</p>}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        {check.detail && (
-                          <p className="text-xs text-neutral-500 mt-0.5">{check.detail}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                      </section>
+                    );
+                  })}
                 </div>
-              </section>
-
-              {/* Opportunities */}
-              {th.opportunities.length > 0 && (
-                <section className="glass-card rounded-2xl p-6 sm:p-8">
-                  <div className="flex items-center gap-3 mb-1">
-                    <Zap className="w-5 h-5 text-orange-400" />
-                    <h2 className="text-lg sm:text-xl font-bold">Forbedringsmuligheder</h2>
-                  </div>
-                  <p className="text-neutral-400 text-xs sm:text-sm mb-6">
-                    Konkrete tiltag der kan forbedre din loadtid — direkte fra Lighthouse.
-                  </p>
-                  <div className="space-y-2">
-                    {th.opportunities.map((opp, i) => (
-                      <details
-                        key={i}
-                        className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]"
-                      >
-                        <summary className="flex items-center justify-between cursor-pointer list-none">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <AlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                            <span className="text-sm font-medium truncate">{opp.title}</span>
-                          </div>
-                          {opp.displayValue && (
-                            <span className="text-xs text-orange-400 font-semibold shrink-0 ml-2">{opp.displayValue}</span>
-                          )}
-                        </summary>
-                        <p className="text-xs text-neutral-400 mt-2 pl-5.5">{opp.description}</p>
-                      </details>
-                    ))}
-                  </div>
-                </section>
               )}
-
-              {/* Diagnostics */}
-              {th.diagnostics.length > 0 && (
-                <section className="glass-card rounded-2xl p-6 sm:p-8">
-                  <div className="flex items-center gap-3 mb-1">
-                    <Info className="w-5 h-5 text-orange-400" />
-                    <h2 className="text-lg sm:text-xl font-bold">Diagnostik</h2>
-                  </div>
-                  <p className="text-neutral-400 text-xs sm:text-sm mb-6">
-                    Yderligere information om sidens tekniske sundhed.
-                  </p>
-                  <div className="space-y-2">
-                    {th.diagnostics.map((diag, i) => (
-                      <details
-                        key={i}
-                        className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]"
-                      >
-                        <summary className="flex items-center justify-between cursor-pointer list-none">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Info className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-                            <span className="text-sm font-medium truncate">{diag.title}</span>
-                          </div>
-                          {diag.displayValue && (
-                            <span className="text-xs text-neutral-400 font-semibold shrink-0 ml-2">{diag.displayValue}</span>
-                          )}
-                        </summary>
-                        <p className="text-xs text-neutral-400 mt-2 pl-5.5">{diag.description}</p>
-                      </details>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Accessibility Issues */}
-              {th.a11yIssues.length > 0 && (
-                <section className="glass-card rounded-2xl p-6 sm:p-8">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg" aria-hidden="true">♿</span>
-                      <h2 className="text-lg sm:text-xl font-bold">Tilgængelighedsproblemer</h2>
-                    </div>
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${scoreBg(th.accessibilityScore)} ${scoreColor(th.accessibilityScore)}`}>
-                      {th.accessibilityScore}/100
-                    </span>
-                  </div>
-                  <p className="text-neutral-400 text-xs sm:text-sm mb-5">
-                    Problemer der påvirker brugere med handicap og screenreaders. Også en SEO-faktor.
-                  </p>
-                  <div className="space-y-2">
-                    {th.a11yIssues.map((issue, i) => (
-                      <details key={i} className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                        <summary className="flex items-center justify-between cursor-pointer list-none">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                            <span className="text-sm font-medium">{issue.title}</span>
-                          </div>
-                        </summary>
-                        <p className="text-xs text-neutral-400 mt-2 ml-5.5">{issue.description}</p>
-                      </details>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* SEO Issues */}
-              {th.seoIssues.length > 0 && (
-                <section className="glass-card rounded-2xl p-6 sm:p-8">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg" aria-hidden="true">🔍</span>
-                      <h2 className="text-lg sm:text-xl font-bold">SEO-problemer</h2>
-                    </div>
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${scoreBg(th.seoScore)} ${scoreColor(th.seoScore)}`}>
-                      {th.seoScore}/100
-                    </span>
-                  </div>
-                  <p className="text-neutral-400 text-xs sm:text-sm mb-5">
-                    Problemer der påvirker sidens synlighed i søgeresultaterne.
-                  </p>
-                  <div className="space-y-2">
-                    {th.seoIssues.map((issue, i) => (
-                      <details key={i} className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                        <summary className="flex items-center justify-between cursor-pointer list-none">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
-                            <span className="text-sm font-medium">{issue.title}</span>
-                          </div>
-                        </summary>
-                        <p className="text-xs text-neutral-400 mt-2 ml-5.5">{issue.description}</p>
-                      </details>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Best Practice Issues */}
-              {th.bestPracticeIssues.length > 0 && (
-                <section className="glass-card rounded-2xl p-6 sm:p-8">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg" aria-hidden="true">⚙️</span>
-                      <h2 className="text-lg sm:text-xl font-bold">Best Practice-problemer</h2>
-                    </div>
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${scoreBg(th.bestPracticesScore)} ${scoreColor(th.bestPracticesScore)}`}>
-                      {th.bestPracticesScore}/100
-                    </span>
-                  </div>
-                  <p className="text-neutral-400 text-xs sm:text-sm mb-5">
-                    Generelle webstandarder og bedste praksis for moderne websites.
-                  </p>
-                  <div className="space-y-2">
-                    {th.bestPracticeIssues.map((issue, i) => (
-                      <details key={i} className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                        <summary className="flex items-center justify-between cursor-pointer list-none">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <AlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                            <span className="text-sm font-medium">{issue.title}</span>
-                          </div>
-                        </summary>
-                        <p className="text-xs text-neutral-400 mt-2 ml-5.5">{issue.description}</p>
-                      </details>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Passed summary */}
-              {th.passedCount > 0 && (
-                <div className="flex items-center gap-2 p-4 rounded-xl bg-green-500/5 border border-green-500/10">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span className="text-sm text-green-300">{th.passedCount} Lighthouse-audits bestået</span>
+              {techSubTab === "security" && !sec && (
+                <div className="glass-card rounded-2xl p-8 text-center">
+                  <Shield className="w-8 h-8 text-neutral-500 mx-auto mb-3" />
+                  <p className="text-neutral-400">Sikkerhedsdata er ikke tilgængelig.</p>
                 </div>
               )}
             </div>

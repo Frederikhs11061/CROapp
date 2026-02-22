@@ -110,6 +110,45 @@ export type ScrapedData = {
     hasAnimations: boolean;
     hasCookieConsent: boolean;
   };
+  securitySignals: {
+    scriptsWithoutSRI: string[];
+    scriptsWithSRI: number;
+    mixedContentUrls: string[];
+    exposedEmails: string[];
+    hasPrivacyPolicy: boolean;
+    hasCookiePolicy: boolean;
+    hasTerms: boolean;
+    hasRecaptcha: boolean;
+    hasLoginForm: boolean;
+    jqueryVersion: string | null;
+    hasContactInfo: boolean;
+    hasCVR: boolean;
+    hasSecureCheckoutBadge: boolean;
+    adminLinks: string[];
+    hasAggressivePopups: boolean;
+  };
+};
+
+export type SecurityHeadersData = {
+  headers: Record<string, string>;
+  hasHSTS: boolean;
+  hstsMaxAge: number | null;
+  hasCSP: boolean;
+  cspValue: string;
+  hasXFrameOptions: boolean;
+  hasXContentTypeOptions: boolean;
+  hasReferrerPolicy: boolean;
+  referrerPolicyValue: string;
+  hasPermissionsPolicy: boolean;
+  hasXXSSProtection: boolean;
+  serverHeader: string;
+  poweredByHeader: string;
+  hasGzip: boolean;
+  hasBrotli: boolean;
+  hasCacheControl: boolean;
+  cacheControlValue: string;
+  tlsVersion: string;
+  robotsTxtContent: string | null;
 };
 
 async function getBrowser() {
@@ -364,6 +403,33 @@ export async function scrapeWebsite(
     const hasAnimations = !!document.querySelector('[class*="animate"], [class*="fade-in"], [class*="slide"]');
     const hasCookieConsent = !!document.querySelector('[class*="cookie"], [class*="consent"], [id*="cookie"], [id*="consent"]');
 
+    // ─── Security-specific HTML checks ───
+    const allScripts = Array.from(document.querySelectorAll("script[src]"));
+    const scriptsWithoutSRI = allScripts.filter((s) => s.getAttribute("src")?.startsWith("http") && !s.getAttribute("integrity")).map((s) => s.getAttribute("src") || "").slice(0, 10);
+    const scriptsWithSRI = allScripts.filter((s) => !!s.getAttribute("integrity")).length;
+
+    const mixedContentEls = Array.from(document.querySelectorAll('img[src^="http:"], script[src^="http:"], link[href^="http:"], iframe[src^="http:"]'));
+    const mixedContentUrls = mixedContentEls.map((e) => (e as HTMLElement).getAttribute("src") || (e as HTMLElement).getAttribute("href") || "").slice(0, 10);
+
+    const exposedEmails = (allText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || []).slice(0, 5);
+
+    const hasPrivacyPolicy = !!document.querySelector('a[href*="privacy"], a[href*="privatlivs"], a[href*="persondatapolitik"], a[href*="gdpr"]');
+    const hasCookiePolicy = !!document.querySelector('a[href*="cookie-policy"], a[href*="cookiepolitik"], a[href*="cookies"]');
+    const hasTerms = !!document.querySelector('a[href*="terms"], a[href*="vilkaar"], a[href*="betingelser"], a[href*="handelsbetingelser"]');
+
+    const hasRecaptcha = !!document.querySelector('[class*="recaptcha"], [class*="g-recaptcha"], script[src*="recaptcha"]');
+    const hasLoginForm = !!document.querySelector('input[type="password"], [class*="login-form"], form[action*="login"], a[href*="login"], a[href*="account"]');
+
+    const jqueryEl = document.querySelector('script[src*="jquery"]');
+    const jqueryVersion = jqueryEl ? (jqueryEl.getAttribute("src")?.match(/jquery[.-](\d+\.\d+\.\d+)/i)?.[1] || "ukendt") : null;
+
+    const hasContactInfo = /(\+45|tlf|telefon|phone|ring)/i.test(allText.slice(0, 5000));
+    const hasCVR = /cvr[\s.:]*\d{8}/i.test(allText) || /dk[\s-]?\d{8}/i.test(allText);
+    const hasSecureCheckoutBadge = /sikker betaling|secure checkout|pci|ssl secured/i.test(allText.slice(0, 10000));
+
+    const adminLinks = Array.from(document.querySelectorAll('a[href*="/wp-admin"], a[href*="/admin"], a[href*="/wp-login"]')).map((a) => (a as HTMLAnchorElement).href).slice(0, 3);
+    const hasAggressivePopups = document.querySelectorAll('[class*="popup"], [class*="modal"][style*="display: block"], [class*="overlay"]').length > 2;
+
     return {
       title: document.title,
       metaDescription: metaTags["description"] || metaTags["og:description"] || "",
@@ -437,6 +503,23 @@ export async function scrapeWebsite(
         hasBackToTop,
         hasAnimations,
         hasCookieConsent,
+      },
+      securitySignals: {
+        scriptsWithoutSRI,
+        scriptsWithSRI,
+        mixedContentUrls,
+        exposedEmails,
+        hasPrivacyPolicy,
+        hasCookiePolicy,
+        hasTerms,
+        hasRecaptcha,
+        hasLoginForm,
+        jqueryVersion,
+        hasContactInfo,
+        hasCVR,
+        hasSecureCheckoutBadge,
+        adminLinks,
+        hasAggressivePopups,
       },
     };
   });
@@ -615,6 +698,61 @@ export async function fetchPageSpeed(
     };
   } catch (err) {
     console.error("[PageSpeed] Fetch failed:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+// ─── Security Headers & Infrastructure Check ────────────────────
+
+export async function fetchSecurityHeaders(url: string): Promise<SecurityHeadersData | null> {
+  try {
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(10000),
+    });
+
+    const h = (name: string) => res.headers.get(name) || "";
+    const headers: Record<string, string> = {};
+    res.headers.forEach((v, k) => { headers[k] = v; });
+
+    const hstsVal = h("strict-transport-security");
+    const hstsMaxAge = hstsVal ? parseInt(hstsVal.match(/max-age=(\d+)/)?.[1] || "0") : null;
+
+    const cspVal = h("content-security-policy");
+    const cacheVal = h("cache-control");
+    const encoding = h("content-encoding").toLowerCase();
+
+    let robotsTxtContent: string | null = null;
+    try {
+      const robotsUrl = new URL("/robots.txt", url).toString();
+      const robotsRes = await fetch(robotsUrl, { signal: AbortSignal.timeout(5000) });
+      if (robotsRes.ok) robotsTxtContent = await robotsRes.text();
+    } catch { /* ignore */ }
+
+    return {
+      headers,
+      hasHSTS: !!hstsVal,
+      hstsMaxAge,
+      hasCSP: !!cspVal,
+      cspValue: cspVal.slice(0, 500),
+      hasXFrameOptions: !!h("x-frame-options"),
+      hasXContentTypeOptions: h("x-content-type-options").toLowerCase() === "nosniff",
+      hasReferrerPolicy: !!h("referrer-policy"),
+      referrerPolicyValue: h("referrer-policy"),
+      hasPermissionsPolicy: !!h("permissions-policy"),
+      hasXXSSProtection: !!h("x-xss-protection"),
+      serverHeader: h("server"),
+      poweredByHeader: h("x-powered-by"),
+      hasGzip: encoding.includes("gzip"),
+      hasBrotli: encoding.includes("br"),
+      hasCacheControl: !!cacheVal,
+      cacheControlValue: cacheVal,
+      tlsVersion: url.startsWith("https") ? "TLS 1.2+" : "Ingen",
+      robotsTxtContent,
+    };
+  } catch (err) {
+    console.error("[Security] Headers fetch failed:", err instanceof Error ? err.message : err);
     return null;
   }
 }

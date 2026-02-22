@@ -1,6 +1,6 @@
 import { ANALYSIS_CATEGORIES } from "./cro-knowledge";
-import type { AnalysisResult, Finding, Category, QuickWin, ABTestIdea, BenchmarkData, BenchmarkComparison, TechnicalHealth, TechnicalHealthCheck } from "./cro-knowledge";
-import type { ScrapedData, PageSpeedData } from "./scraper";
+import type { AnalysisResult, Finding, Category, QuickWin, ABTestIdea, BenchmarkData, BenchmarkComparison, TechnicalHealth, SpeedData, SecurityAudit, SecurityCheck, CWVMetric } from "./cro-knowledge";
+import type { ScrapedData, PageSpeedData, SecurityHeadersData } from "./scraper";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -779,205 +779,221 @@ function fmtMs(ms: number): string {
 
 function cwvRating(metric: string, value: number): "good" | "needs-improvement" | "poor" {
   const thresholds: Record<string, [number, number]> = {
-    LCP: [2500, 4000],
-    FCP: [1800, 3000],
-    TBT: [200, 600],
-    CLS: [0.1, 0.25],
-    SI: [3400, 5800],
-    TTFB: [800, 1800],
+    LCP: [2500, 4000], FCP: [1800, 3000], TBT: [200, 600],
+    CLS: [0.1, 0.25], SI: [3400, 5800], TTFB: [800, 1800],
   };
   const t = thresholds[metric];
   if (!t) return "good";
   return value <= t[0] ? "good" : value <= t[1] ? "needs-improvement" : "poor";
 }
 
-function buildTechnicalHealth(ctx: AnalysisContext): TechnicalHealth | null {
-  const { pageSpeed, data } = ctx;
-  if (!pageSpeed) return null;
+const CWV_INFO: Record<string, { fullName: string; explanation: string; howToFix: string[] }> = {
+  LCP: {
+    fullName: "Largest Contentful Paint",
+    explanation: "Måler hvornår det største synlige element (billede/tekstblok) er indlæst. Det er den vigtigste metrik for brugerens oplevelse af loadtid.",
+    howToFix: ["Optimer hero-billeder: brug WebP/AVIF-format og passende størrelse", "Preload vigtigste billede med <link rel=\"preload\">", "Reducer render-blocking CSS/JS", "Brug CDN til statiske filer", "Implementér server-side caching og komprimering (gzip/brotli)"],
+  },
+  FCP: {
+    fullName: "First Contentful Paint",
+    explanation: "Måler hvornår den første tekst eller det første billede vises. Brugerens første visuelle signal om at siden loader.",
+    howToFix: ["Reducer server-responstid (TTFB)", "Eliminér render-blocking ressourcer (defer/async JS, critical CSS inline)", "Minificér HTML, CSS og JavaScript", "Brug font-display: swap for webfonts"],
+  },
+  TBT: {
+    fullName: "Total Blocking Time",
+    explanation: "Samlet tid hvor main thread er blokeret. Høj TBT = siden føles langsom og uresponsiv.",
+    howToFix: ["Reducer og opsplit store JavaScript-bundles med code splitting", "Fjern eller udskyd unødvendige tredjepartsscripts", "Brug web workers til tunge beregninger", "Lazy-load komponenter under fold"],
+  },
+  CLS: {
+    fullName: "Cumulative Layout Shift",
+    explanation: "Måler hvor meget sidens layout 'hopper' under indlæsning. Højt CLS frustrerer brugeren.",
+    howToFix: ["Sæt altid width/height på billeder og videoer", "Reservér plads til annoncer og embeds", "Undgå at indsætte indhold dynamisk over eksisterende", "Brug font-display: optional eller swap + preload"],
+  },
+  SI: {
+    fullName: "Speed Index",
+    explanation: "Måler hvor hurtigt indholdet visuelt bliver synligt. Lavere = hurtigere opfattet loadtid.",
+    howToFix: ["Prioritér synligt indhold above the fold", "Optimer kritisk rendering path (inline critical CSS)", "Reducer render-blocking tredjepartsscripts", "Brug progressive rendering og skeleton screens"],
+  },
+  TTFB: {
+    fullName: "Time to First Byte",
+    explanation: "Tiden fra brugerens request til serveren sender den første byte. Mål for serverens hastighed.",
+    howToFix: ["Aktivér server-side caching (Redis, Varnish, CDN edge caching)", "Optimer databaseforespørgsler", "Brug CDN tæt på brugerne", "Overvej statisk generering (SSG)"],
+  },
+};
 
-  const coreWebVitals = [
-    {
-      metric: "LCP", fullName: "Largest Contentful Paint",
-      value: fmtMs(pageSpeed.lcp), rating: cwvRating("LCP", pageSpeed.lcp), threshold: "≤ 2.5 s",
-      explanation: "Måler hvornår det største synlige element (billede/tekstblok) er indlæst. Det er den vigtigste metrik for brugerens oplevelse af loadtid.",
-      howToFix: [
-        "Optimer hero-billeder: brug WebP/AVIF-format og passende størrelse",
-        "Preload vigtigste billede med <link rel=\"preload\">",
-        "Reducer render-blocking CSS/JS — flyt ikke-kritisk CSS til async",
-        "Brug CDN til at servere statiske filer tættere på brugeren",
-        "Implementér server-side caching og komprimering (gzip/brotli)",
-      ],
-    },
-    {
-      metric: "FCP", fullName: "First Contentful Paint",
-      value: fmtMs(pageSpeed.fcp), rating: cwvRating("FCP", pageSpeed.fcp), threshold: "≤ 1.8 s",
-      explanation: "Måler hvornår den første tekst eller det første billede vises. Det er brugerens første visuelle signal om at siden indlæses.",
-      howToFix: [
-        "Reducer server-responstid (TTFB) — vælg hurtigere hosting eller aktivér caching",
-        "Eliminér render-blocking ressourcer (defer/async på JS, critical CSS inline)",
-        "Minificér HTML, CSS og JavaScript",
-        "Brug font-display: swap for webfonts så tekst vises med det samme",
-      ],
-    },
-    {
-      metric: "TBT", fullName: "Total Blocking Time",
-      value: fmtMs(pageSpeed.tbt), rating: cwvRating("TBT", pageSpeed.tbt), threshold: "≤ 200 ms",
-      explanation: "Samlet tid hvor main thread er blokeret og siden ikke reagerer på brugerinput. Høj TBT = siden føles langsom og uresponsiv.",
-      howToFix: [
-        "Reducer og opsplit store JavaScript-bundles med code splitting",
-        "Fjern eller udskyd unødvendige tredjepartsscripts (analytics, chat-widgets, tag managers)",
-        "Brug web workers til tunge beregninger",
-        "Lazy-load komponenter der ikke er synlige above the fold",
-      ],
-    },
-    {
-      metric: "CLS", fullName: "Cumulative Layout Shift",
-      value: pageSpeed.cls.toFixed(3), rating: cwvRating("CLS", pageSpeed.cls), threshold: "≤ 0.1",
-      explanation: "Måler hvor meget sidens layout 'hopper' under indlæsning. Højt CLS = elementer flytter sig uventet, hvilket frustrerer brugeren.",
-      howToFix: [
-        "Sæt altid width/height attributter på billeder og videoer",
-        "Reservér plads til annoncer og embeds med faste dimensioner",
-        "Undgå at indsætte indhold dynamisk over eksisterende indhold",
-        "Brug font-display: optional eller swap + preload for webfonts",
-      ],
-    },
-    {
-      metric: "SI", fullName: "Speed Index",
-      value: fmtMs(pageSpeed.si), rating: cwvRating("SI", pageSpeed.si), threshold: "≤ 3.4 s",
-      explanation: "Måler hvor hurtigt indholdet visuelt bliver synligt. Lavere = hurtigere opfattet loadtid for brugeren.",
-      howToFix: [
-        "Prioritér synligt indhold above the fold — indlæs det først",
-        "Optimer kritisk rendering path (inline critical CSS)",
-        "Reducer tredjepartsscripts der blokerer rendering",
-        "Brug progressive rendering og skeleton screens",
-      ],
-    },
-    {
-      metric: "TTFB", fullName: "Time to First Byte",
-      value: fmtMs(pageSpeed.ttfb), rating: cwvRating("TTFB", pageSpeed.ttfb), threshold: "≤ 800 ms",
-      explanation: "Tiden fra brugerens request til serveren sender den første byte. Det er et mål for serverens hastighed og netværkslatens.",
-      howToFix: [
-        "Aktivér server-side caching (Redis, Varnish, eller CDN edge caching)",
-        "Optimer databaseforespørgsler og server-logik",
-        "Brug et CDN tæt på dine brugere (Cloudflare, Vercel Edge, etc.)",
-        "Overvej statisk generering (SSG) for sider der ikke ændrer sig ofte",
-      ],
-    },
-  ];
-
-  const checks: TechnicalHealthCheck[] = [];
-
-  checks.push({
-    label: "HTTPS / SSL",
-    status: pageSpeed.isHttps ? "pass" : "fail",
-    value: pageSpeed.isHttps ? "Aktiveret" : "Ikke aktiveret",
-    detail: pageSpeed.isHttps ? "Siden kører over en sikker HTTPS-forbindelse." : "Siden kører IKKE over HTTPS. Det påvirker sikkerhed, SEO og brugertillid. Google nedprioriterer HTTP-sider.",
-  });
-
-  checks.push({
-    label: "Viewport meta-tag",
-    status: pageSpeed.hasViewportMeta ? "pass" : "fail",
-    value: pageSpeed.hasViewportMeta ? "Korrekt" : "Mangler",
-    detail: pageSpeed.hasViewportMeta ? "Siden har korrekt viewport meta-tag til mobilvisning." : "Siden mangler viewport meta-tag. Tilføj <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> i <head>.",
-  });
-
-  checks.push({
-    label: "Doctype",
-    status: pageSpeed.hasDoctype ? "pass" : "fail",
-    value: pageSpeed.hasDoctype ? "Korrekt" : "Mangler",
-    detail: pageSpeed.hasDoctype ? undefined : "Tilføj <!DOCTYPE html> øverst i HTML-filen for at sikre korrekt rendering.",
-  });
-
-  checks.push({
-    label: "Charset-deklaration",
-    status: pageSpeed.hasCharset ? "pass" : "fail",
-    value: pageSpeed.hasCharset ? "Korrekt" : "Mangler",
-    detail: pageSpeed.hasCharset ? undefined : "Tilføj <meta charset=\"utf-8\"> i <head> for korrekt tegnkodning.",
-  });
-
-  checks.push({
-    label: "Cookie-samtykke (GDPR)",
-    status: data.uxSignals.hasCookieConsent ? "pass" : "warning",
-    value: data.uxSignals.hasCookieConsent ? "Registreret" : "Ikke fundet",
-    detail: data.uxSignals.hasCookieConsent
-      ? "Siden viser en cookie-samtykke-dialog."
-      : "Vi kunne ikke finde en cookie-samtykke-dialog. EU's GDPR kræver samtykke inden tracking-cookies sættes. Implementér en CMP (Consent Management Platform).",
-  });
-
-  checks.push({
-    label: "Billedalt-tekst",
-    status: data.uxSignals.hasAltOnAllImages ? "pass" : "warning",
-    value: data.uxSignals.hasAltOnAllImages ? "Alle billeder har alt-tekst" : "Mangler på nogle billeder",
-    detail: data.uxSignals.hasAltOnAllImages ? undefined : "Billeder uden alt-tekst skader tilgængelighed (screenreaders) og SEO (Google kan ikke 'se' billedet). Tilføj beskrivende alt-tekst til alle billeder.",
-  });
-
-  checks.push({
-    label: "Skip-to-content link",
-    status: data.uxSignals.hasSkipToContent ? "pass" : "warning",
-    value: data.uxSignals.hasSkipToContent ? "Findes" : "Mangler",
-    detail: data.uxSignals.hasSkipToContent ? undefined : "Tilføj et skip-to-content link som det første element i <body> for tastaturbrugere og WCAG-overholdelse.",
-  });
-
-  checks.push({
-    label: "ARIA-attributter",
-    status: data.uxSignals.hasAriaLabels ? "pass" : "warning",
-    value: data.uxSignals.hasAriaLabels ? "Registreret" : "Ikke fundet",
-    detail: data.uxSignals.hasAriaLabels ? undefined : "ARIA-labels hjælper screenreaders med at forstå interaktive elementer. Tilføj aria-label på knapper, links og formularer uden synlig tekst.",
-  });
-
-  const bytesMB = (pageSpeed.totalByteWeight / (1024 * 1024)).toFixed(1);
-  checks.push({
-    label: "Total sidestørrelse",
-    status: pageSpeed.totalByteWeight < 2_000_000 ? "pass" : pageSpeed.totalByteWeight < 4_000_000 ? "warning" : "fail",
-    value: `${bytesMB} MB (${pageSpeed.totalRequestCount} requests)`,
-    detail: pageSpeed.totalByteWeight >= 2_000_000 ? "Siden er tung. Mål: under 2 MB. Optimer billeder, minificér kode, og reducer tredjepartsscripts." : undefined,
-  });
-
-  const opportunities = pageSpeed.opportunities.map((o) => ({
-    title: o.title,
-    displayValue: o.displayValue,
-    description: o.description,
-  }));
-
-  const diagnostics = pageSpeed.diagnostics.map((d) => ({
-    title: d.title,
-    displayValue: d.displayValue,
-    description: d.description,
-  }));
-
-  const a11yIssues = pageSpeed.a11yIssues.map((a) => ({
-    title: a.title, description: a.description, displayValue: a.displayValue,
-  }));
-
-  const seoIssues = pageSpeed.seoIssues.map((s) => ({
-    title: s.title, description: s.description, displayValue: s.displayValue,
-  }));
-
-  const bestPracticeIssues = pageSpeed.bestPracticeIssues.map((b) => ({
-    title: b.title, description: b.description, displayValue: b.displayValue,
-  }));
+function buildSpeedData(ps: PageSpeedData): SpeedData {
+  const cwv = (key: string, val: number, threshStr: string): CWVMetric => {
+    const info = CWV_INFO[key] || { fullName: key, explanation: "", howToFix: [] };
+    return {
+      metric: key, fullName: info.fullName,
+      value: key === "CLS" ? val.toFixed(3) : fmtMs(val),
+      rating: cwvRating(key, val), threshold: threshStr,
+      explanation: info.explanation, howToFix: info.howToFix,
+    };
+  };
 
   return {
-    performanceScore: pageSpeed.performanceScore,
-    accessibilityScore: pageSpeed.accessibilityScore,
-    bestPracticesScore: pageSpeed.bestPracticesScore,
-    seoScore: pageSpeed.seoScore,
-    coreWebVitals,
-    checks,
-    opportunities,
-    diagnostics,
-    a11yIssues,
-    seoIssues,
-    bestPracticeIssues,
-    passedCount: pageSpeed.passedAudits.length,
+    performanceScore: ps.performanceScore,
+    accessibilityScore: ps.accessibilityScore,
+    bestPracticesScore: ps.bestPracticesScore,
+    seoScore: ps.seoScore,
+    coreWebVitals: [
+      cwv("LCP", ps.lcp, "≤ 2.5 s"), cwv("FCP", ps.fcp, "≤ 1.8 s"),
+      cwv("TBT", ps.tbt, "≤ 200 ms"), cwv("CLS", ps.cls, "≤ 0.1"),
+      cwv("SI", ps.si, "≤ 3.4 s"), cwv("TTFB", ps.ttfb, "≤ 800 ms"),
+    ],
+    opportunities: ps.opportunities.map((o) => ({ title: o.title, displayValue: o.displayValue, description: o.description })),
+    diagnostics: ps.diagnostics.map((d) => ({ title: d.title, displayValue: d.displayValue, description: d.description })),
+    a11yIssues: ps.a11yIssues.map((a) => ({ title: a.title, description: a.description, displayValue: a.displayValue })),
+    seoIssues: ps.seoIssues.map((s) => ({ title: s.title, description: s.description, displayValue: s.displayValue })),
+    bestPracticeIssues: ps.bestPracticeIssues.map((b) => ({ title: b.title, description: b.description, displayValue: b.displayValue })),
+    passedCount: ps.passedAudits.length,
   };
+}
+
+function buildSecurityAudit(data: ScrapedData, sec: SecurityHeadersData | null, isHttps: boolean): SecurityAudit {
+  const checks: SecurityCheck[] = [];
+  const ss = data.securitySignals;
+
+  // ── 1. Transport & Kryptering ──
+  checks.push({ category: "Transport & Kryptering", label: "HTTPS aktiveret", status: isHttps ? "pass" : "fail", value: isHttps ? "Ja" : "Nej", risk: isHttps ? "none" : "high", detail: isHttps ? "Siden kører over HTTPS." : "Siden kører IKKE over HTTPS. Kritisk for sikkerhed, SEO og brugertillid.", howToFix: isHttps ? undefined : "Aktivér SSL-certifikat via din hosting-udbyder eller Cloudflare (gratis)." });
+  if (ss.mixedContentUrls.length > 0) {
+    checks.push({ category: "Transport & Kryptering", label: "Mixed content", status: "fail", value: `${ss.mixedContentUrls.length} HTTP-ressourcer på HTTPS-side`, risk: "medium", detail: `Fundet: ${ss.mixedContentUrls.slice(0, 3).join(", ")}`, howToFix: "Ret alle http:// URL'er til https:// i HTML, CSS og JS." });
+  } else {
+    checks.push({ category: "Transport & Kryptering", label: "Mixed content", status: "pass", value: "Ingen fundet", risk: "none" });
+  }
+  if (sec) {
+    checks.push({ category: "Transport & Kryptering", label: "HSTS header", status: sec.hasHSTS ? "pass" : "fail", value: sec.hasHSTS ? `Aktiveret (max-age: ${sec.hstsMaxAge})` : "Mangler", risk: sec.hasHSTS ? "none" : "high", howToFix: sec.hasHSTS ? undefined : "Tilføj header: Strict-Transport-Security: max-age=31536000; includeSubDomains" });
+    checks.push({ category: "Transport & Kryptering", label: "TLS version", status: "info", value: sec.tlsVersion, risk: "none" });
+  }
+
+  // ── 2. Security Headers ──
+  if (sec) {
+    checks.push({ category: "Security Headers", label: "Content-Security-Policy", status: sec.hasCSP ? "pass" : "fail", value: sec.hasCSP ? "Aktiveret" : "Mangler", risk: sec.hasCSP ? "none" : "high", detail: sec.hasCSP ? `Policy: ${sec.cspValue.slice(0, 100)}...` : "CSP beskytter mod XSS og code injection-angreb.", howToFix: sec.hasCSP ? undefined : "Tilføj Content-Security-Policy header. Start med: default-src 'self'; script-src 'self'" });
+    checks.push({ category: "Security Headers", label: "X-Frame-Options", status: sec.hasXFrameOptions ? "pass" : "fail", value: sec.hasXFrameOptions ? "Aktiveret" : "Mangler", risk: sec.hasXFrameOptions ? "none" : "medium", howToFix: sec.hasXFrameOptions ? undefined : "Tilføj: X-Frame-Options: SAMEORIGIN for at forhindre clickjacking." });
+    checks.push({ category: "Security Headers", label: "X-Content-Type-Options", status: sec.hasXContentTypeOptions ? "pass" : "fail", value: sec.hasXContentTypeOptions ? "nosniff" : "Mangler", risk: sec.hasXContentTypeOptions ? "none" : "medium", howToFix: sec.hasXContentTypeOptions ? undefined : "Tilføj: X-Content-Type-Options: nosniff" });
+    checks.push({ category: "Security Headers", label: "Referrer-Policy", status: sec.hasReferrerPolicy ? "pass" : "warning", value: sec.hasReferrerPolicy ? sec.referrerPolicyValue : "Mangler", risk: sec.hasReferrerPolicy ? "none" : "low", howToFix: sec.hasReferrerPolicy ? undefined : "Tilføj: Referrer-Policy: strict-origin-when-cross-origin" });
+    checks.push({ category: "Security Headers", label: "Permissions-Policy", status: sec.hasPermissionsPolicy ? "pass" : "warning", value: sec.hasPermissionsPolicy ? "Aktiveret" : "Mangler", risk: sec.hasPermissionsPolicy ? "none" : "low", howToFix: sec.hasPermissionsPolicy ? undefined : "Tilføj Permissions-Policy header for at begrænse browser-API-adgang." });
+    checks.push({ category: "Security Headers", label: "X-XSS-Protection", status: sec.hasXXSSProtection ? "pass" : "warning", value: sec.hasXXSSProtection ? "Aktiveret" : "Mangler", risk: sec.hasXXSSProtection ? "none" : "low" });
+  }
+
+  // ── 3. Cookie & Tracking Compliance ──
+  checks.push({ category: "Cookie & GDPR", label: "Cookie-samtykke banner", status: data.uxSignals.hasCookieConsent ? "pass" : "fail", value: data.uxSignals.hasCookieConsent ? "Registreret" : "Ikke fundet", risk: data.uxSignals.hasCookieConsent ? "none" : "high", howToFix: data.uxSignals.hasCookieConsent ? undefined : "Implementér en CMP (fx Cookiebot, CookieYes) der blokerer tracking-scripts indtil samtykke." });
+  checks.push({ category: "Cookie & GDPR", label: "Privatlivspolitik", status: ss.hasPrivacyPolicy ? "pass" : "fail", value: ss.hasPrivacyPolicy ? "Link fundet" : "Ikke fundet", risk: ss.hasPrivacyPolicy ? "none" : "high", howToFix: ss.hasPrivacyPolicy ? undefined : "Tilføj en side med privatlivspolitik og link til den fra footer." });
+  checks.push({ category: "Cookie & GDPR", label: "Cookiepolitik", status: ss.hasCookiePolicy ? "pass" : "warning", value: ss.hasCookiePolicy ? "Link fundet" : "Ikke fundet", risk: ss.hasCookiePolicy ? "none" : "medium" });
+  checks.push({ category: "Cookie & GDPR", label: "Handelsbetingelser", status: ss.hasTerms ? "pass" : "warning", value: ss.hasTerms ? "Link fundet" : "Ikke fundet", risk: ss.hasTerms ? "none" : "low" });
+  checks.push({ category: "Cookie & GDPR", label: "Kontaktoplysninger", status: ss.hasContactInfo ? "pass" : "warning", value: ss.hasContactInfo ? "Fundet" : "Ikke fundet", risk: ss.hasContactInfo ? "none" : "medium" });
+  checks.push({ category: "Cookie & GDPR", label: "CVR-nummer", status: ss.hasCVR ? "pass" : "warning", value: ss.hasCVR ? "Fundet" : "Ikke fundet", risk: ss.hasCVR ? "none" : "low", detail: "Dansk lovkrav for erhvervsdrivende." });
+
+  // ── 4. Formular & Login-sikkerhed ──
+  if (ss.hasLoginForm) {
+    checks.push({ category: "Formular-sikkerhed", label: "Login-formular fundet", status: "info", value: "Ja", risk: "none", detail: "Tjek at rate limiting, 2FA og password-krav er implementeret." });
+  }
+  checks.push({ category: "Formular-sikkerhed", label: "reCAPTCHA / spam-beskyttelse", status: ss.hasRecaptcha ? "pass" : "warning", value: ss.hasRecaptcha ? "Registreret" : "Ikke fundet", risk: ss.hasRecaptcha ? "none" : "medium", howToFix: ss.hasRecaptcha ? undefined : "Tilføj reCAPTCHA eller hCaptcha på formularer for at forhindre spam." });
+  if (ss.exposedEmails.length > 0) {
+    checks.push({ category: "Formular-sikkerhed", label: "Eksponerede e-mails", status: "warning", value: `${ss.exposedEmails.length} fundet i klar tekst`, risk: "medium", detail: ss.exposedEmails.join(", "), howToFix: "Brug en kontaktformular i stedet for at vise e-mails direkte — det forhindrer spam-bots." });
+  }
+
+  // ── 5. Server & Infrastruktur ──
+  if (sec) {
+    if (sec.serverHeader) {
+      checks.push({ category: "Server & Infrastruktur", label: "Server-type eksponeret", status: "warning", value: sec.serverHeader, risk: "medium", howToFix: "Fjern eller skjul Server-headeren for at undgå fingerprinting. I Nginx: server_tokens off;" });
+    } else {
+      checks.push({ category: "Server & Infrastruktur", label: "Server-type eksponeret", status: "pass", value: "Skjult", risk: "none" });
+    }
+    if (sec.poweredByHeader) {
+      checks.push({ category: "Server & Infrastruktur", label: "X-Powered-By eksponeret", status: "warning", value: sec.poweredByHeader, risk: "medium", howToFix: "Fjern X-Powered-By header. I Express: app.disable('x-powered-by')" });
+    }
+    checks.push({ category: "Server & Infrastruktur", label: "Komprimering (Gzip/Brotli)", status: sec.hasGzip || sec.hasBrotli ? "pass" : "warning", value: sec.hasBrotli ? "Brotli" : sec.hasGzip ? "Gzip" : "Ikke aktiveret", risk: sec.hasGzip || sec.hasBrotli ? "none" : "medium", howToFix: !(sec.hasGzip || sec.hasBrotli) ? "Aktivér gzip eller brotli-komprimering på serveren for at reducere sidestørrelse 60-80%." : undefined });
+    checks.push({ category: "Server & Infrastruktur", label: "Cache-Control header", status: sec.hasCacheControl ? "pass" : "warning", value: sec.hasCacheControl ? sec.cacheControlValue.slice(0, 60) : "Mangler", risk: sec.hasCacheControl ? "none" : "medium" });
+    if (sec.robotsTxtContent !== null) {
+      const hasDisallowAdmin = /disallow:.*\/(wp-)?admin/i.test(sec.robotsTxtContent);
+      checks.push({ category: "Server & Infrastruktur", label: "robots.txt", status: "pass", value: "Fundet", risk: "none", detail: hasDisallowAdmin ? "Admin-sider er korrekt blokeret." : "Overvej at blokere admin-sider med Disallow." });
+    } else {
+      checks.push({ category: "Server & Infrastruktur", label: "robots.txt", status: "warning", value: "Ikke fundet", risk: "low", howToFix: "Opret en robots.txt fil i roden af dit domæne." });
+    }
+  }
+  if (ss.adminLinks.length > 0) {
+    checks.push({ category: "Server & Infrastruktur", label: "Admin-login synlig", status: "warning", value: `${ss.adminLinks.length} link(s) fundet`, risk: "medium", detail: ss.adminLinks.join(", "), howToFix: "Flyt eller skjul admin-login URL. Brug et plugin til at ændre login-stien." });
+  }
+
+  // ── 6. Script-sikkerhed ──
+  if (ss.scriptsWithoutSRI.length > 0) {
+    checks.push({ category: "Script-sikkerhed", label: "CDN-scripts uden SRI", status: "warning", value: `${ss.scriptsWithoutSRI.length} scripts uden integrity-hash`, risk: "medium", detail: ss.scriptsWithoutSRI.slice(0, 3).join(", "), howToFix: "Tilføj integrity og crossorigin attributter til eksterne scripts for Subresource Integrity (SRI)." });
+  } else if (ss.scriptsWithSRI > 0) {
+    checks.push({ category: "Script-sikkerhed", label: "Subresource Integrity (SRI)", status: "pass", value: `${ss.scriptsWithSRI} scripts med integrity-hash`, risk: "none" });
+  }
+  if (ss.jqueryVersion) {
+    const majorMinor = ss.jqueryVersion.split(".").map(Number);
+    const isOld = majorMinor[0] < 3 || (majorMinor[0] === 3 && majorMinor[1] < 5);
+    checks.push({ category: "Script-sikkerhed", label: "jQuery version", status: isOld ? "warning" : "pass", value: `jQuery ${ss.jqueryVersion}`, risk: isOld ? "medium" : "none", detail: isOld ? "Forældet jQuery-version kan have kendte sikkerhedssårbarheder." : undefined, howToFix: isOld ? "Opdatér til jQuery 3.7+ eller fjern jQuery-afhængigheden helt." : undefined });
+  }
+
+  // ── 7. UX-sikkerhed ──
+  if (ss.hasAggressivePopups) {
+    checks.push({ category: "UX-sikkerhed", label: "Aggressive popups/overlays", status: "warning", value: "Flere fundet", risk: "medium", howToFix: "Reducer antallet af popups. Google straffer intrusive interstitials på mobil." });
+  }
+
+  // ── 8. E-commerce ──
+  if (data.structuralInfo.hasAddToCart || data.structuralInfo.hasCartWidget) {
+    checks.push({ category: "E-commerce sikkerhed", label: "Secure checkout-badge", status: ss.hasSecureCheckoutBadge ? "pass" : "warning", value: ss.hasSecureCheckoutBadge ? "Fundet" : "Ikke fundet", risk: ss.hasSecureCheckoutBadge ? "none" : "medium", howToFix: ss.hasSecureCheckoutBadge ? undefined : "Tilføj synlige 'Sikker betaling'-badges tæt på checkout for at øge tillid." });
+  }
+
+  // ── Score calculation ──
+  const highRisks = checks.filter((c) => c.risk === "high").length;
+  const medRisks = checks.filter((c) => c.risk === "medium").length;
+  const totalChecks = checks.filter((c) => c.status !== "info").length;
+  const passed = checks.filter((c) => c.status === "pass").length;
+
+  const securityScore = totalChecks > 0 ? Math.max(0, Math.min(100, Math.round((passed / totalChecks) * 100))) : 0;
+  const privacyChecks = checks.filter((c) => c.category === "Cookie & GDPR");
+  const privacyPassed = privacyChecks.filter((c) => c.status === "pass").length;
+  const privacyScore = privacyChecks.length > 0 ? Math.round((privacyPassed / privacyChecks.length) * 100) : 0;
+  const infraChecks = checks.filter((c) => c.category === "Server & Infrastruktur" || c.category === "Transport & Kryptering");
+  const infraPassed = infraChecks.filter((c) => c.status === "pass").length;
+  const infraScore = infraChecks.length > 0 ? Math.round((infraPassed / infraChecks.length) * 100) : 0;
+
+  const overallRisk: "low" | "medium" | "high" | "critical" =
+    highRisks >= 3 ? "critical" : highRisks >= 1 ? "high" : medRisks >= 3 ? "medium" : "low";
+
+  const categoryMap = new Map<string, SecurityCheck[]>();
+  for (const c of checks) {
+    if (!categoryMap.has(c.category)) categoryMap.set(c.category, []);
+    categoryMap.get(c.category)!.push(c);
+  }
+
+  const catIcons: Record<string, string> = {
+    "Transport & Kryptering": "🔒", "Security Headers": "🛡️", "Cookie & GDPR": "🍪",
+    "Formular-sikkerhed": "📝", "Server & Infrastruktur": "⚙️", "Script-sikkerhed": "📜",
+    "UX-sikkerhed": "👁️", "E-commerce sikkerhed": "🛒",
+  };
+
+  const categories = Array.from(categoryMap.entries()).map(([name, chks]) => ({
+    name, icon: catIcons[name] || "🔍", checks: chks,
+  }));
+
+  return { securityScore, privacyScore, infrastructureScore: infraScore, overallRisk, categories };
+}
+
+function buildTechnicalHealth(data: ScrapedData, psDesktop: PageSpeedData | null, psMobile: PageSpeedData | null, secHeaders: SecurityHeadersData | null): TechnicalHealth | null {
+  const isHttps = data.url.startsWith("https");
+  const desktop = psDesktop ? buildSpeedData(psDesktop) : null;
+  const mobile = psMobile ? buildSpeedData(psMobile) : null;
+  const security = buildSecurityAudit(data, secHeaders, isHttps);
+
+  if (!desktop && !mobile && security.securityScore === 0) return null;
+  return { desktop, mobile, security };
 }
 
 // ─── Main ───────────────────────────────────────────────────────
 
-export function analyzeWebsite(data: ScrapedData, pageSpeed: PageSpeedData | null = null): AnalysisResult {
+export function analyzeWebsite(
+  data: ScrapedData,
+  pageSpeedDesktop: PageSpeedData | null = null,
+  pageSpeedMobile: PageSpeedData | null = null,
+  securityHeaders: SecurityHeadersData | null = null,
+): AnalysisResult {
   const pageType = detectPageType(data);
-  const ctx: AnalysisContext = { data, pageType, pageSpeed };
+  const ctx: AnalysisContext = { data, pageType, pageSpeed: pageSpeedDesktop };
 
   const categories: Category[] = [
     analyzeAboveTheFold(ctx),
@@ -994,7 +1010,7 @@ export function analyzeWebsite(data: ScrapedData, pageSpeed: PageSpeedData | nul
   const overallScore = Math.round(categories.reduce((a, c) => a + c.score, 0) / categories.length);
   const abTestIdeas = generateABTestIdeas(ctx, categories);
   const benchmark = generateBenchmark(ctx, categories, overallScore);
-  const technicalHealth = buildTechnicalHealth(ctx);
+  const technicalHealth = buildTechnicalHealth(data, pageSpeedDesktop, pageSpeedMobile, securityHeaders);
 
   return {
     overallScore,

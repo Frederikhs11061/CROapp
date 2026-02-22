@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { scrapeWebsite, fetchPageSpeed } from "@/lib/scraper";
-import type { PageSpeedData } from "@/lib/scraper";
+import { scrapeWebsite, fetchPageSpeed, fetchSecurityHeaders } from "@/lib/scraper";
+import type { PageSpeedData, SecurityHeadersData } from "@/lib/scraper";
 import { analyzeWebsite } from "@/lib/analyzer";
 
 export const maxDuration = 60;
@@ -8,7 +8,7 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { url, viewport = "desktop" } = body;
+    const { url } = body;
 
     if (!url) {
       return NextResponse.json({ error: "URL er påkrævet" }, { status: 400 });
@@ -22,21 +22,15 @@ export async function POST(request: NextRequest) {
     }
 
     const fullUrl = parsedUrl.toString();
-    const strat = viewport === "mobile" ? "mobile" as const : "desktop" as const;
 
-    const [scrapedData, pageSpeed] = await Promise.all([
-      scrapeWebsite(fullUrl, viewport),
-      fetchPageSpeed(fullUrl, strat).catch((err): PageSpeedData | null => {
-        console.error("[API] PageSpeed failed, continuing without:", err);
-        return null;
-      }),
+    const [scrapedData, pageSpeedDesktop, pageSpeedMobile, securityHeaders] = await Promise.all([
+      scrapeWebsite(fullUrl, "desktop"),
+      fetchPageSpeed(fullUrl, "desktop").catch((): PageSpeedData | null => null),
+      fetchPageSpeed(fullUrl, "mobile").catch((): PageSpeedData | null => null),
+      fetchSecurityHeaders(fullUrl).catch((): SecurityHeadersData | null => null),
     ]);
 
-    console.log("[API] PageSpeed result:", pageSpeed ? "OK" : "null");
-
-    const analysis = analyzeWebsite(scrapedData, pageSpeed);
-
-    console.log("[API] technicalHealth:", analysis.technicalHealth ? "present" : "null");
+    const analysis = analyzeWebsite(scrapedData, pageSpeedDesktop, pageSpeedMobile, securityHeaders);
 
     return NextResponse.json({
       success: true,

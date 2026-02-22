@@ -66,27 +66,58 @@ export type TechnicalHealthCheck = {
   detail?: string;
 };
 
-export type TechnicalHealth = {
+export type CWVMetric = {
+  metric: string;
+  fullName: string;
+  value: string;
+  rating: "good" | "needs-improvement" | "poor";
+  threshold: string;
+  explanation: string;
+  howToFix: string[];
+};
+
+export type LighthouseAuditItem = { title: string; displayValue?: string; description: string };
+
+export type SpeedData = {
   performanceScore: number;
   accessibilityScore: number;
   bestPracticesScore: number;
   seoScore: number;
-  coreWebVitals: {
-    metric: string;
-    fullName: string;
-    value: string;
-    rating: "good" | "needs-improvement" | "poor";
-    threshold: string;
-    explanation: string;
-    howToFix: string[];
-  }[];
-  checks: TechnicalHealthCheck[];
-  opportunities: { title: string; displayValue?: string; description: string }[];
-  diagnostics: { title: string; displayValue?: string; description: string }[];
-  a11yIssues: { title: string; description: string; displayValue?: string }[];
-  seoIssues: { title: string; description: string; displayValue?: string }[];
-  bestPracticeIssues: { title: string; description: string; displayValue?: string }[];
+  coreWebVitals: CWVMetric[];
+  opportunities: LighthouseAuditItem[];
+  diagnostics: LighthouseAuditItem[];
+  a11yIssues: LighthouseAuditItem[];
+  seoIssues: LighthouseAuditItem[];
+  bestPracticeIssues: LighthouseAuditItem[];
   passedCount: number;
+};
+
+export type SecurityCheck = {
+  category: string;
+  label: string;
+  status: "pass" | "fail" | "warning" | "info";
+  value: string;
+  detail?: string;
+  risk: "high" | "medium" | "low" | "none";
+  howToFix?: string;
+};
+
+export type SecurityAudit = {
+  securityScore: number;
+  privacyScore: number;
+  infrastructureScore: number;
+  overallRisk: "low" | "medium" | "high" | "critical";
+  categories: {
+    name: string;
+    icon: string;
+    checks: SecurityCheck[];
+  }[];
+};
+
+export type TechnicalHealth = {
+  desktop: SpeedData | null;
+  mobile: SpeedData | null;
+  security: SecurityAudit | null;
 };
 
 export type AnalysisResult = {
