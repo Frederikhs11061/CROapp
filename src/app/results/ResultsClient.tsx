@@ -256,7 +256,7 @@ export default function ResultsClient() {
                     .map((fi, i) => (
                       <div key={i} className="flex items-start gap-2 text-xs">
                         <span className="text-red-400 mt-0.5 shrink-0">●</span>
-                        <span className="text-neutral-300">{fi.title} – <span className="text-neutral-500">{fi.description.slice(0, 80)}{fi.description.length > 80 ? "…" : ""}</span></span>
+                        <span className="text-neutral-300">{fi.title} – <span className="text-neutral-500">{fi.description}</span></span>
                       </div>
                     ))}
                 </div>
