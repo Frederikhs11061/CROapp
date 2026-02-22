@@ -179,10 +179,10 @@ export async function scrapeWebsite(
 
   const startTime = Date.now();
   try {
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 20000 });
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
   } catch {
     // Fallback: if networkidle2 times out, just wait for DOM
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await new Promise((r) => setTimeout(r, 3000));
   }
   const loadTime = Date.now() - startTime;
@@ -593,7 +593,7 @@ export async function fetchPageSpeed(
   console.log("[PageSpeed] Fetching:", strategy, url, apiKey ? "(with API key)" : "(no API key)");
 
   try {
-    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(35000) });
+    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(90000) });
     if (!res.ok) {
       console.error("[PageSpeed] API error:", res.status, res.statusText);
       if (res.status === 429) {

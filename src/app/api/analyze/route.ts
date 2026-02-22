@@ -3,7 +3,7 @@ import { scrapeWebsite, fetchPageSpeed, fetchSecurityHeaders } from "@/lib/scrap
 import type { PageSpeedData, SecurityHeadersData } from "@/lib/scraper";
 import { analyzeWebsite } from "@/lib/analyzer";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,18 +23,14 @@ export async function POST(request: NextRequest) {
 
     const fullUrl = parsedUrl.toString();
 
-    // Scrape + security headers in parallel with sequential PageSpeed calls
-    const [scrapedData, securityHeaders, pageSpeeds] = await Promise.all([
+    const [scrapedData, securityHeaders, pageSpeedDesktop, pageSpeedMobile] = await Promise.all([
       scrapeWebsite(fullUrl, "desktop"),
       fetchSecurityHeaders(fullUrl).catch((): SecurityHeadersData | null => null),
-      (async () => {
-        const desktop = await fetchPageSpeed(fullUrl, "desktop").catch((): PageSpeedData | null => null);
-        const mobile = await fetchPageSpeed(fullUrl, "mobile").catch((): PageSpeedData | null => null);
-        return { desktop, mobile };
-      })(),
+      fetchPageSpeed(fullUrl, "desktop").catch((): PageSpeedData | null => null),
+      fetchPageSpeed(fullUrl, "mobile").catch((): PageSpeedData | null => null),
     ]);
 
-    const analysis = analyzeWebsite(scrapedData, pageSpeeds.desktop, pageSpeeds.mobile, securityHeaders);
+    const analysis = analyzeWebsite(scrapedData, pageSpeedDesktop, pageSpeedMobile, securityHeaders);
 
     return NextResponse.json({
       success: true,
