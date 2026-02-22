@@ -139,10 +139,16 @@ export async function scrapeWebsite(
   }
 
   const startTime = Date.now();
-  await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+  try {
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 20000 });
+  } catch {
+    // Fallback: if networkidle2 times out, just wait for DOM
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
+    await new Promise((r) => setTimeout(r, 3000));
+  }
   const loadTime = Date.now() - startTime;
 
-  await new Promise((r) => setTimeout(r, 2000));
+  await new Promise((r) => setTimeout(r, 1500));
 
   const screenshot = await page.screenshot({
     encoding: "base64",
