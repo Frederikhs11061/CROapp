@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scrapeWebsite, fetchPageSpeed } from "@/lib/scraper";
+import type { PageSpeedData } from "@/lib/scraper";
 import { analyzeWebsite } from "@/lib/analyzer";
 
 export const maxDuration = 60;
@@ -21,14 +22,21 @@ export async function POST(request: NextRequest) {
     }
 
     const fullUrl = parsedUrl.toString();
+    const strat = viewport === "mobile" ? "mobile" as const : "desktop" as const;
 
-    // Run scraping and PageSpeed in parallel
     const [scrapedData, pageSpeed] = await Promise.all([
       scrapeWebsite(fullUrl, viewport),
-      fetchPageSpeed(fullUrl, viewport === "mobile" ? "mobile" : "desktop"),
+      fetchPageSpeed(fullUrl, strat).catch((err): PageSpeedData | null => {
+        console.error("[API] PageSpeed failed, continuing without:", err);
+        return null;
+      }),
     ]);
 
+    console.log("[API] PageSpeed result:", pageSpeed ? "OK" : "null");
+
     const analysis = analyzeWebsite(scrapedData, pageSpeed);
+
+    console.log("[API] technicalHealth:", analysis.technicalHealth ? "present" : "null");
 
     return NextResponse.json({
       success: true,
@@ -36,7 +44,6 @@ export async function POST(request: NextRequest) {
       screenshot: scrapedData.screenshot,
       url: fullUrl,
       scrapedAt: new Date().toISOString(),
-      pageSpeed,
     });
   } catch (error) {
     console.error("Analysis error:", error);

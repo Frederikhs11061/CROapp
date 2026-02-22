@@ -340,7 +340,8 @@ export default function ResultsClient() {
           if (!th) return (
             <div className="glass-card rounded-2xl p-8 text-center">
               <Gauge className="w-8 h-8 text-neutral-500 mx-auto mb-3" />
-              <p className="text-neutral-400">Teknisk data var ikke tilgængelig for denne analyse. Prøv igen.</p>
+              <p className="text-neutral-400 mb-2">Google PageSpeed data kunne ikke hentes for denne analyse.</p>
+              <p className="text-neutral-500 text-xs">Dette kan skyldes rate-limiting fra Google. Kør en ny analyse for at prøve igen.</p>
             </div>
           );
 

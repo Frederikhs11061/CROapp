@@ -492,17 +492,29 @@ export async function fetchPageSpeed(
   url: string,
   strategy: "mobile" | "desktop" = "mobile"
 ): Promise<PageSpeedData | null> {
-  try {
-    const cats = ["performance", "accessibility", "best-practices", "seo"]
-      .map((c) => `category=${c}`)
-      .join("&");
-    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=${strategy}&${cats}`;
-    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(45000) });
-    if (!res.ok) return null;
-    const data = await res.json();
+  const apiKey = process.env.PAGESPEED_API_KEY || "";
+  const keyParam = apiKey ? `&key=${apiKey}` : "";
+  const cats = "category=performance&category=accessibility&category=best-practices&category=seo";
+  const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=${strategy}&${cats}${keyParam}`;
 
-    const lhr = data.lighthouseResult;
-    if (!lhr) return null;
+  console.log("[PageSpeed] Fetching:", strategy, url, apiKey ? "(with API key)" : "(no API key)");
+
+  try {
+    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(50000) });
+    if (!res.ok) {
+      console.error("[PageSpeed] API error:", res.status, res.statusText);
+      if (res.status === 429) {
+        console.error("[PageSpeed] Rate limited. Add PAGESPEED_API_KEY env var for higher limits.");
+      }
+      return null;
+    }
+    const json = await res.json();
+
+    const lhr = json.lighthouseResult;
+    if (!lhr) {
+      console.error("[PageSpeed] No lighthouseResult in response");
+      return null;
+    }
 
     const audits = lhr.audits || {};
     const catScores = lhr.categories || {};
@@ -538,6 +550,8 @@ export async function fetchPageSpeed(
       }
     }
 
+    console.log("[PageSpeed] Success — perf:", toScore("performance"), "a11y:", toScore("accessibility"), "bp:", toScore("best-practices"), "seo:", toScore("seo"));
+
     return {
       performanceScore: toScore("performance"),
       accessibilityScore: toScore("accessibility"),
@@ -560,7 +574,8 @@ export async function fetchPageSpeed(
       diagnostics,
       passedAudits,
     };
-  } catch {
+  } catch (err) {
+    console.error("[PageSpeed] Fetch failed:", err instanceof Error ? err.message : err);
     return null;
   }
 }
