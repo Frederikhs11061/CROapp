@@ -29,6 +29,15 @@ export default function URLInputForm() {
         body: JSON.stringify({ url: url.trim(), viewport: "desktop" }),
       });
 
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          res.status === 504
+            ? "Analysen tog for lang tid. Prøv igen — siden kan være langsom at scrape."
+            : `Serverfejl (${res.status}). Prøv igen om et øjeblik.`
+        );
+      }
+
       const data = await res.json();
 
       if (!res.ok) {

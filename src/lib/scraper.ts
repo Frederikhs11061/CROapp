@@ -504,7 +504,7 @@ export async function fetchPageSpeed(
   console.log("[PageSpeed] Fetching:", strategy, url, apiKey ? "(with API key)" : "(no API key)");
 
   try {
-    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(50000) });
+    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(35000) });
     if (!res.ok) {
       console.error("[PageSpeed] API error:", res.status, res.statusText);
       if (res.status === 429) {
