@@ -23,14 +23,18 @@ export async function POST(request: NextRequest) {
 
     const fullUrl = parsedUrl.toString();
 
-    const [scrapedData, pageSpeedDesktop, pageSpeedMobile, securityHeaders] = await Promise.all([
+    // Scrape + security headers in parallel with sequential PageSpeed calls
+    const [scrapedData, securityHeaders, pageSpeeds] = await Promise.all([
       scrapeWebsite(fullUrl, "desktop"),
-      fetchPageSpeed(fullUrl, "desktop").catch((): PageSpeedData | null => null),
-      fetchPageSpeed(fullUrl, "mobile").catch((): PageSpeedData | null => null),
       fetchSecurityHeaders(fullUrl).catch((): SecurityHeadersData | null => null),
+      (async () => {
+        const desktop = await fetchPageSpeed(fullUrl, "desktop").catch((): PageSpeedData | null => null);
+        const mobile = await fetchPageSpeed(fullUrl, "mobile").catch((): PageSpeedData | null => null);
+        return { desktop, mobile };
+      })(),
     ]);
 
-    const analysis = analyzeWebsite(scrapedData, pageSpeedDesktop, pageSpeedMobile, securityHeaders);
+    const analysis = analyzeWebsite(scrapedData, pageSpeeds.desktop, pageSpeeds.mobile, securityHeaders);
 
     return NextResponse.json({
       success: true,
