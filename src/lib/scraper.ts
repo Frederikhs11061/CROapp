@@ -166,7 +166,15 @@ export async function scrapeWebsite(
   viewport: "desktop" | "mobile" = "desktop"
 ): Promise<ScrapedData> {
   const browser = await getBrowser();
-  const page = await browser.newPage();
+  let page;
+  try {
+    page = await browser.newPage();
+  } catch (err) {
+    await browser.close().catch(() => {});
+    throw new Error(`Kunne ikke åbne browser-side: ${err instanceof Error ? err.message : err}`);
+  }
+
+  try {
 
   if (viewport === "mobile") {
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
@@ -181,20 +189,28 @@ export async function scrapeWebsite(
   try {
     await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
   } catch {
-    // Fallback: if networkidle2 times out, just wait for DOM
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await new Promise((r) => setTimeout(r, 3000));
+    } catch {
+      await page.goto(url, { waitUntil: "load", timeout: 30000 });
+      await new Promise((r) => setTimeout(r, 2000));
+    }
   }
   const loadTime = Date.now() - startTime;
 
   await new Promise((r) => setTimeout(r, 1500));
 
-  const screenshot = await page.screenshot({
-    encoding: "base64",
-    fullPage: false,
-    type: "jpeg",
-    quality: 80,
-  });
+  let screenshot = "";
+  try {
+    const buf = await Promise.race([
+      page.screenshot({ encoding: "base64", fullPage: false, type: "jpeg", quality: 70 }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("screenshot timeout")), 10000)),
+    ]);
+    screenshot = buf as string;
+  } catch (err) {
+    console.error("[Scraper] Screenshot failed:", err instanceof Error ? err.message : err);
+  }
 
   const pageData = await page.evaluate(() => {
     const vw = window.innerWidth;
@@ -524,23 +540,28 @@ export async function scrapeWebsite(
     };
   });
 
-  const performanceTiming = await page.evaluate(() => {
-    const perf = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming;
-    return {
-      domContentLoaded: Math.round(perf?.domContentLoadedEventEnd ?? 0),
-      resourceCount: performance.getEntriesByType("resource").length,
-    };
-  });
-
-  await browser.close();
+  let performanceTiming = { domContentLoaded: 0, resourceCount: 0 };
+  try {
+    performanceTiming = await page.evaluate(() => {
+      const perf = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming;
+      return {
+        domContentLoaded: Math.round(perf?.domContentLoadedEventEnd ?? 0),
+        resourceCount: performance.getEntriesByType("resource").length,
+      };
+    });
+  } catch { /* ignore */ }
 
   return {
     ...pageData,
     url,
-    screenshot: `data:image/jpeg;base64,${screenshot}`,
+    screenshot: screenshot ? `data:image/jpeg;base64,${screenshot}` : "",
     performance: { loadTime, ...performanceTiming },
     viewport,
   };
+
+  } finally {
+    await browser.close().catch(() => {});
+  }
 }
 
 // ─── PageSpeed Insights (real Lighthouse data) ──────────────────
