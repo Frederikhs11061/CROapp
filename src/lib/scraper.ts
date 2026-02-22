@@ -199,7 +199,11 @@ export async function scrapeWebsite(
   }
   const loadTime = Date.now() - startTime;
 
-  await new Promise((r) => setTimeout(r, 1500));
+  // Wait for any client-side redirects to settle
+  try {
+    await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 5000 }).catch(() => {});
+  } catch { /* no pending navigation, that's fine */ }
+  await new Promise((r) => setTimeout(r, 2000));
 
   let screenshot = "";
   try {
@@ -210,6 +214,21 @@ export async function scrapeWebsite(
     screenshot = buf as string;
   } catch (err) {
     console.error("[Scraper] Screenshot failed:", err instanceof Error ? err.message : err);
+  }
+
+  // Verify frame is still attached before evaluating
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await page.evaluate(() => document.readyState);
+      break;
+    } catch (err) {
+      if (attempt < 2 && err instanceof Error && err.message.includes("detached")) {
+        console.error(`[Scraper] Frame detached (attempt ${attempt + 1}), waiting...`);
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      throw err;
+    }
   }
 
   const pageData = await page.evaluate(() => {
