@@ -213,10 +213,10 @@ export default function ResultsClient() {
         <nav aria-label="Rapport-sektioner" className="flex gap-1.5 mb-8 overflow-x-auto pb-2 p-1.5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
           {([
             { key: "overview" as const, icon: TrendingUp, label: "Overblik" },
-            { key: "technical" as const, icon: Gauge, label: "Hastighed & Sikkerhed" },
             { key: "actions" as const, icon: Zap, label: "Prioriterede handlinger" },
             { key: "ab-tests" as const, icon: FlaskConical, label: "A/B Test-idéer" },
             { key: "benchmark" as const, icon: BarChart3, label: "Competitor Benchmark" },
+            { key: "technical" as const, icon: Gauge, label: "Hastighed & Sikkerhed" },
           ]).map((tab) => (
             <button
               key={tab.key}
