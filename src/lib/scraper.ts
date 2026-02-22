@@ -463,6 +463,7 @@ export type PageSpeedAuditItem = {
   score: number | null;
   displayValue?: string;
   numericValue?: number;
+  category?: string;
 };
 
 export type PageSpeedData = {
@@ -486,6 +487,9 @@ export type PageSpeedData = {
   opportunities: PageSpeedAuditItem[];
   diagnostics: PageSpeedAuditItem[];
   passedAudits: PageSpeedAuditItem[];
+  a11yIssues: PageSpeedAuditItem[];
+  seoIssues: PageSpeedAuditItem[];
+  bestPracticeIssues: PageSpeedAuditItem[];
 };
 
 export async function fetchPageSpeed(
@@ -522,13 +526,14 @@ export async function fetchPageSpeed(
     const toScore = (cat: string) =>
       Math.round((catScores[cat]?.score ?? 0) * 100);
 
-    const mapAudit = (a: Record<string, unknown>): PageSpeedAuditItem => ({
+    const mapAudit = (a: Record<string, unknown>, cat?: string): PageSpeedAuditItem => ({
       id: a.id as string,
       title: a.title as string,
       description: ((a.description as string) || "").replace(/\[.*?\]\(.*?\)/g, "").trim(),
       score: typeof a.score === "number" ? a.score : null,
       displayValue: a.displayValue as string | undefined,
       numericValue: a.numericValue as number | undefined,
+      category: cat,
     });
 
     const opportunities: PageSpeedAuditItem[] = [];
@@ -542,15 +547,40 @@ export async function fetchPageSpeed(
       const s = audit.score;
       const group = (ref as { group?: string }).group;
       if (group === "load-opportunities" && s !== null && s < 1) {
-        opportunities.push(mapAudit(audit));
+        opportunities.push(mapAudit(audit, "performance"));
       } else if (group === "diagnostics" && s !== null && s < 1) {
-        diagnostics.push(mapAudit(audit));
+        diagnostics.push(mapAudit(audit, "performance"));
       } else if (s === 1 && (group === "load-opportunities" || group === "diagnostics")) {
-        passedAudits.push(mapAudit(audit));
+        passedAudits.push(mapAudit(audit, "performance"));
       }
     }
 
-    console.log("[PageSpeed] Success — perf:", toScore("performance"), "a11y:", toScore("accessibility"), "bp:", toScore("best-practices"), "seo:", toScore("seo"));
+    const extractFailedAudits = (catKey: string): PageSpeedAuditItem[] => {
+      const refs = catScores[catKey]?.auditRefs || [];
+      const items: PageSpeedAuditItem[] = [];
+      const metricIds = new Set(["first-contentful-paint", "largest-contentful-paint", "cumulative-layout-shift", "total-blocking-time", "speed-index", "server-response-time"]);
+      for (const ref of refs) {
+        const id = (ref as { id: string }).id;
+        const audit = audits[id];
+        if (!audit || metricIds.has(id)) continue;
+        if (typeof audit.score === "number" && audit.score < 1 && audit.scoreDisplayMode !== "notApplicable") {
+          items.push(mapAudit(audit, catKey));
+        }
+      }
+      return items;
+    };
+
+    const a11yIssues = extractFailedAudits("accessibility");
+    const seoIssues = extractFailedAudits("seo");
+    const bestPracticeIssues = extractFailedAudits("best-practices");
+
+    const totalPassed = ["performance", "accessibility", "best-practices", "seo"].reduce((sum, catKey) => {
+      const refs = catScores[catKey]?.auditRefs || [];
+      return sum + refs.filter((ref: { id: string }) => audits[ref.id]?.score === 1).length;
+    }, 0);
+
+    console.log("[PageSpeed] Success — perf:", toScore("performance"), "a11y:", toScore("accessibility"), "bp:", toScore("best-practices"), "seo:", toScore("seo"),
+      "| issues: a11y:", a11yIssues.length, "seo:", seoIssues.length, "bp:", bestPracticeIssues.length);
 
     return {
       performanceScore: toScore("performance"),
@@ -572,7 +602,10 @@ export async function fetchPageSpeed(
       hasDoctype: audits["doctype"]?.score === 1,
       opportunities,
       diagnostics,
-      passedAudits,
+      passedAudits: passedAudits.slice(0, 5),
+      a11yIssues,
+      seoIssues,
+      bestPracticeIssues,
     };
   } catch (err) {
     console.error("[PageSpeed] Fetch failed:", err instanceof Error ? err.message : err);

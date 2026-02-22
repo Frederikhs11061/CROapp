@@ -796,12 +796,73 @@ function buildTechnicalHealth(ctx: AnalysisContext): TechnicalHealth | null {
   if (!pageSpeed) return null;
 
   const coreWebVitals = [
-    { metric: "LCP", value: fmtMs(pageSpeed.lcp), rating: cwvRating("LCP", pageSpeed.lcp), threshold: "≤ 2.5 s" },
-    { metric: "FCP", value: fmtMs(pageSpeed.fcp), rating: cwvRating("FCP", pageSpeed.fcp), threshold: "≤ 1.8 s" },
-    { metric: "TBT", value: fmtMs(pageSpeed.tbt), rating: cwvRating("TBT", pageSpeed.tbt), threshold: "≤ 200 ms" },
-    { metric: "CLS", value: pageSpeed.cls.toFixed(3), rating: cwvRating("CLS", pageSpeed.cls), threshold: "≤ 0.1" },
-    { metric: "Speed Index", value: fmtMs(pageSpeed.si), rating: cwvRating("SI", pageSpeed.si), threshold: "≤ 3.4 s" },
-    { metric: "TTFB", value: fmtMs(pageSpeed.ttfb), rating: cwvRating("TTFB", pageSpeed.ttfb), threshold: "≤ 800 ms" },
+    {
+      metric: "LCP", fullName: "Largest Contentful Paint",
+      value: fmtMs(pageSpeed.lcp), rating: cwvRating("LCP", pageSpeed.lcp), threshold: "≤ 2.5 s",
+      explanation: "Måler hvornår det største synlige element (billede/tekstblok) er indlæst. Det er den vigtigste metrik for brugerens oplevelse af loadtid.",
+      howToFix: [
+        "Optimer hero-billeder: brug WebP/AVIF-format og passende størrelse",
+        "Preload vigtigste billede med <link rel=\"preload\">",
+        "Reducer render-blocking CSS/JS — flyt ikke-kritisk CSS til async",
+        "Brug CDN til at servere statiske filer tættere på brugeren",
+        "Implementér server-side caching og komprimering (gzip/brotli)",
+      ],
+    },
+    {
+      metric: "FCP", fullName: "First Contentful Paint",
+      value: fmtMs(pageSpeed.fcp), rating: cwvRating("FCP", pageSpeed.fcp), threshold: "≤ 1.8 s",
+      explanation: "Måler hvornår den første tekst eller det første billede vises. Det er brugerens første visuelle signal om at siden indlæses.",
+      howToFix: [
+        "Reducer server-responstid (TTFB) — vælg hurtigere hosting eller aktivér caching",
+        "Eliminér render-blocking ressourcer (defer/async på JS, critical CSS inline)",
+        "Minificér HTML, CSS og JavaScript",
+        "Brug font-display: swap for webfonts så tekst vises med det samme",
+      ],
+    },
+    {
+      metric: "TBT", fullName: "Total Blocking Time",
+      value: fmtMs(pageSpeed.tbt), rating: cwvRating("TBT", pageSpeed.tbt), threshold: "≤ 200 ms",
+      explanation: "Samlet tid hvor main thread er blokeret og siden ikke reagerer på brugerinput. Høj TBT = siden føles langsom og uresponsiv.",
+      howToFix: [
+        "Reducer og opsplit store JavaScript-bundles med code splitting",
+        "Fjern eller udskyd unødvendige tredjepartsscripts (analytics, chat-widgets, tag managers)",
+        "Brug web workers til tunge beregninger",
+        "Lazy-load komponenter der ikke er synlige above the fold",
+      ],
+    },
+    {
+      metric: "CLS", fullName: "Cumulative Layout Shift",
+      value: pageSpeed.cls.toFixed(3), rating: cwvRating("CLS", pageSpeed.cls), threshold: "≤ 0.1",
+      explanation: "Måler hvor meget sidens layout 'hopper' under indlæsning. Højt CLS = elementer flytter sig uventet, hvilket frustrerer brugeren.",
+      howToFix: [
+        "Sæt altid width/height attributter på billeder og videoer",
+        "Reservér plads til annoncer og embeds med faste dimensioner",
+        "Undgå at indsætte indhold dynamisk over eksisterende indhold",
+        "Brug font-display: optional eller swap + preload for webfonts",
+      ],
+    },
+    {
+      metric: "SI", fullName: "Speed Index",
+      value: fmtMs(pageSpeed.si), rating: cwvRating("SI", pageSpeed.si), threshold: "≤ 3.4 s",
+      explanation: "Måler hvor hurtigt indholdet visuelt bliver synligt. Lavere = hurtigere opfattet loadtid for brugeren.",
+      howToFix: [
+        "Prioritér synligt indhold above the fold — indlæs det først",
+        "Optimer kritisk rendering path (inline critical CSS)",
+        "Reducer tredjepartsscripts der blokerer rendering",
+        "Brug progressive rendering og skeleton screens",
+      ],
+    },
+    {
+      metric: "TTFB", fullName: "Time to First Byte",
+      value: fmtMs(pageSpeed.ttfb), rating: cwvRating("TTFB", pageSpeed.ttfb), threshold: "≤ 800 ms",
+      explanation: "Tiden fra brugerens request til serveren sender den første byte. Det er et mål for serverens hastighed og netværkslatens.",
+      howToFix: [
+        "Aktivér server-side caching (Redis, Varnish, eller CDN edge caching)",
+        "Optimer databaseforespørgsler og server-logik",
+        "Brug et CDN tæt på dine brugere (Cloudflare, Vercel Edge, etc.)",
+        "Overvej statisk generering (SSG) for sider der ikke ændrer sig ofte",
+      ],
+    },
   ];
 
   const checks: TechnicalHealthCheck[] = [];
@@ -810,26 +871,28 @@ function buildTechnicalHealth(ctx: AnalysisContext): TechnicalHealth | null {
     label: "HTTPS / SSL",
     status: pageSpeed.isHttps ? "pass" : "fail",
     value: pageSpeed.isHttps ? "Aktiveret" : "Ikke aktiveret",
-    detail: pageSpeed.isHttps ? "Siden kører over en sikker HTTPS-forbindelse." : "Siden kører IKKE over HTTPS. Det påvirker sikkerhed, SEO og brugertillid.",
+    detail: pageSpeed.isHttps ? "Siden kører over en sikker HTTPS-forbindelse." : "Siden kører IKKE over HTTPS. Det påvirker sikkerhed, SEO og brugertillid. Google nedprioriterer HTTP-sider.",
   });
 
   checks.push({
     label: "Viewport meta-tag",
     status: pageSpeed.hasViewportMeta ? "pass" : "fail",
     value: pageSpeed.hasViewportMeta ? "Korrekt" : "Mangler",
-    detail: pageSpeed.hasViewportMeta ? "Siden har korrekt viewport meta-tag til mobilvisning." : "Siden mangler viewport meta-tag, hvilket giver dårlig mobiloplevelse.",
+    detail: pageSpeed.hasViewportMeta ? "Siden har korrekt viewport meta-tag til mobilvisning." : "Siden mangler viewport meta-tag. Tilføj <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> i <head>.",
   });
 
   checks.push({
     label: "Doctype",
     status: pageSpeed.hasDoctype ? "pass" : "fail",
     value: pageSpeed.hasDoctype ? "Korrekt" : "Mangler",
+    detail: pageSpeed.hasDoctype ? undefined : "Tilføj <!DOCTYPE html> øverst i HTML-filen for at sikre korrekt rendering.",
   });
 
   checks.push({
     label: "Charset-deklaration",
     status: pageSpeed.hasCharset ? "pass" : "fail",
     value: pageSpeed.hasCharset ? "Korrekt" : "Mangler",
+    detail: pageSpeed.hasCharset ? undefined : "Tilføj <meta charset=\"utf-8\"> i <head> for korrekt tegnkodning.",
   });
 
   checks.push({
@@ -838,35 +901,36 @@ function buildTechnicalHealth(ctx: AnalysisContext): TechnicalHealth | null {
     value: data.uxSignals.hasCookieConsent ? "Registreret" : "Ikke fundet",
     detail: data.uxSignals.hasCookieConsent
       ? "Siden viser en cookie-samtykke-dialog."
-      : "Vi kunne ikke finde en cookie-samtykke-dialog. Sørg for GDPR-overholdelse.",
+      : "Vi kunne ikke finde en cookie-samtykke-dialog. EU's GDPR kræver samtykke inden tracking-cookies sættes. Implementér en CMP (Consent Management Platform).",
   });
 
   checks.push({
     label: "Billedalt-tekst",
     status: data.uxSignals.hasAltOnAllImages ? "pass" : "warning",
     value: data.uxSignals.hasAltOnAllImages ? "Alle billeder har alt-tekst" : "Mangler på nogle billeder",
-    detail: data.uxSignals.hasAltOnAllImages ? undefined : "Billeder uden alt-tekst skader tilgængelighed og SEO.",
+    detail: data.uxSignals.hasAltOnAllImages ? undefined : "Billeder uden alt-tekst skader tilgængelighed (screenreaders) og SEO (Google kan ikke 'se' billedet). Tilføj beskrivende alt-tekst til alle billeder.",
   });
 
   checks.push({
     label: "Skip-to-content link",
     status: data.uxSignals.hasSkipToContent ? "pass" : "warning",
     value: data.uxSignals.hasSkipToContent ? "Findes" : "Mangler",
-    detail: "Et skip-to-content link forbedrer tilgængelighed for tastaturbrugere.",
+    detail: data.uxSignals.hasSkipToContent ? undefined : "Tilføj et skip-to-content link som det første element i <body> for tastaturbrugere og WCAG-overholdelse.",
   });
 
   checks.push({
     label: "ARIA-attributter",
     status: data.uxSignals.hasAriaLabels ? "pass" : "warning",
     value: data.uxSignals.hasAriaLabels ? "Registreret" : "Ikke fundet",
+    detail: data.uxSignals.hasAriaLabels ? undefined : "ARIA-labels hjælper screenreaders med at forstå interaktive elementer. Tilføj aria-label på knapper, links og formularer uden synlig tekst.",
   });
 
   const bytesMB = (pageSpeed.totalByteWeight / (1024 * 1024)).toFixed(1);
   checks.push({
     label: "Total sidestørrelse",
     status: pageSpeed.totalByteWeight < 2_000_000 ? "pass" : pageSpeed.totalByteWeight < 4_000_000 ? "warning" : "fail",
-    value: `${bytesMB} MB`,
-    detail: `${pageSpeed.totalRequestCount} requests i alt.`,
+    value: `${bytesMB} MB (${pageSpeed.totalRequestCount} requests)`,
+    detail: pageSpeed.totalByteWeight >= 2_000_000 ? "Siden er tung. Mål: under 2 MB. Optimer billeder, minificér kode, og reducer tredjepartsscripts." : undefined,
   });
 
   const opportunities = pageSpeed.opportunities.map((o) => ({
@@ -881,6 +945,18 @@ function buildTechnicalHealth(ctx: AnalysisContext): TechnicalHealth | null {
     description: d.description,
   }));
 
+  const a11yIssues = pageSpeed.a11yIssues.map((a) => ({
+    title: a.title, description: a.description, displayValue: a.displayValue,
+  }));
+
+  const seoIssues = pageSpeed.seoIssues.map((s) => ({
+    title: s.title, description: s.description, displayValue: s.displayValue,
+  }));
+
+  const bestPracticeIssues = pageSpeed.bestPracticeIssues.map((b) => ({
+    title: b.title, description: b.description, displayValue: b.displayValue,
+  }));
+
   return {
     performanceScore: pageSpeed.performanceScore,
     accessibilityScore: pageSpeed.accessibilityScore,
@@ -890,6 +966,9 @@ function buildTechnicalHealth(ctx: AnalysisContext): TechnicalHealth | null {
     checks,
     opportunities,
     diagnostics,
+    a11yIssues,
+    seoIssues,
+    bestPracticeIssues,
     passedCount: pageSpeed.passedAudits.length,
   };
 }

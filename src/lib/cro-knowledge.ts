@@ -73,13 +73,19 @@ export type TechnicalHealth = {
   seoScore: number;
   coreWebVitals: {
     metric: string;
+    fullName: string;
     value: string;
     rating: "good" | "needs-improvement" | "poor";
     threshold: string;
+    explanation: string;
+    howToFix: string[];
   }[];
   checks: TechnicalHealthCheck[];
   opportunities: { title: string; displayValue?: string; description: string }[];
   diagnostics: { title: string; displayValue?: string; description: string }[];
+  a11yIssues: { title: string; description: string; displayValue?: string }[];
+  seoIssues: { title: string; description: string; displayValue?: string }[];
+  bestPracticeIssues: { title: string; description: string; displayValue?: string }[];
   passedCount: number;
 };
 

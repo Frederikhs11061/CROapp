@@ -395,25 +395,53 @@ export default function ResultsClient() {
                   <h2 className="text-lg sm:text-xl font-bold">Core Web Vitals</h2>
                 </div>
                 <p className="text-neutral-400 text-xs sm:text-sm mb-6">
-                  Googles vigtigste hastigheds- og brugeroplevelsesmetrikker.
+                  Googles vigtigste hastigheds- og brugeroplevelsesmetrikker. Klik for at se forklaringer og løsninger.
                 </p>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="space-y-3">
                   {th.coreWebVitals.map((v) => (
-                    <div
+                    <details
                       key={v.metric}
-                      className={`p-4 rounded-xl border ${ratingBg(v.rating)}`}
+                      className={`rounded-xl border overflow-hidden ${ratingBg(v.rating)}`}
+                      open={v.rating === "poor"}
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider">{v.metric}</span>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          v.rating === "good" ? "bg-green-500/20 text-green-400" :
-                          v.rating === "needs-improvement" ? "bg-yellow-500/20 text-yellow-400" :
-                          "bg-red-500/20 text-red-400"
-                        }`}>{ratingLabel(v.rating)}</span>
+                      <summary className="p-4 cursor-pointer list-none">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider">{v.metric}</span>
+                                <span className="text-[10px] text-neutral-500 hidden sm:inline">({v.fullName})</span>
+                              </div>
+                              <div className={`text-xl font-bold mt-0.5 ${ratingColor(v.rating)}`}>{v.value}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-neutral-500">Mål: {v.threshold}</span>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              v.rating === "good" ? "bg-green-500/20 text-green-400" :
+                              v.rating === "needs-improvement" ? "bg-yellow-500/20 text-yellow-400" :
+                              "bg-red-500/20 text-red-400"
+                            }`}>{ratingLabel(v.rating)}</span>
+                          </div>
+                        </div>
+                      </summary>
+                      <div className="px-4 pb-4 border-t border-white/[0.05] pt-3 space-y-3">
+                        <p className="text-xs text-neutral-300 leading-relaxed">{v.explanation}</p>
+                        {v.rating !== "good" && v.howToFix.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-bold text-orange-400 uppercase tracking-wider mb-1.5">Sådan forbedrer du det:</p>
+                            <ul className="space-y-1">
+                              {v.howToFix.map((fix, i) => (
+                                <li key={i} className="flex items-start gap-2 text-xs text-neutral-300">
+                                  <span className="text-orange-400 mt-0.5 shrink-0">→</span>
+                                  {fix}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
-                      <div className={`text-xl font-bold ${ratingColor(v.rating)}`}>{v.value}</div>
-                      <div className="text-[11px] text-neutral-500 mt-1">Anbefalet: {v.threshold}</div>
-                    </div>
+                    </details>
                   ))}
                 </div>
               </section>
@@ -518,6 +546,99 @@ export default function ResultsClient() {
                           )}
                         </summary>
                         <p className="text-xs text-neutral-400 mt-2 pl-5.5">{diag.description}</p>
+                      </details>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Accessibility Issues */}
+              {th.a11yIssues.length > 0 && (
+                <section className="glass-card rounded-2xl p-6 sm:p-8">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg" aria-hidden="true">♿</span>
+                      <h2 className="text-lg sm:text-xl font-bold">Tilgængelighedsproblemer</h2>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${scoreBg(th.accessibilityScore)} ${scoreColor(th.accessibilityScore)}`}>
+                      {th.accessibilityScore}/100
+                    </span>
+                  </div>
+                  <p className="text-neutral-400 text-xs sm:text-sm mb-5">
+                    Problemer der påvirker brugere med handicap og screenreaders. Også en SEO-faktor.
+                  </p>
+                  <div className="space-y-2">
+                    {th.a11yIssues.map((issue, i) => (
+                      <details key={i} className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                        <summary className="flex items-center justify-between cursor-pointer list-none">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                            <span className="text-sm font-medium">{issue.title}</span>
+                          </div>
+                        </summary>
+                        <p className="text-xs text-neutral-400 mt-2 ml-5.5">{issue.description}</p>
+                      </details>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* SEO Issues */}
+              {th.seoIssues.length > 0 && (
+                <section className="glass-card rounded-2xl p-6 sm:p-8">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg" aria-hidden="true">🔍</span>
+                      <h2 className="text-lg sm:text-xl font-bold">SEO-problemer</h2>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${scoreBg(th.seoScore)} ${scoreColor(th.seoScore)}`}>
+                      {th.seoScore}/100
+                    </span>
+                  </div>
+                  <p className="text-neutral-400 text-xs sm:text-sm mb-5">
+                    Problemer der påvirker sidens synlighed i søgeresultaterne.
+                  </p>
+                  <div className="space-y-2">
+                    {th.seoIssues.map((issue, i) => (
+                      <details key={i} className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                        <summary className="flex items-center justify-between cursor-pointer list-none">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+                            <span className="text-sm font-medium">{issue.title}</span>
+                          </div>
+                        </summary>
+                        <p className="text-xs text-neutral-400 mt-2 ml-5.5">{issue.description}</p>
+                      </details>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Best Practice Issues */}
+              {th.bestPracticeIssues.length > 0 && (
+                <section className="glass-card rounded-2xl p-6 sm:p-8">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg" aria-hidden="true">⚙️</span>
+                      <h2 className="text-lg sm:text-xl font-bold">Best Practice-problemer</h2>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${scoreBg(th.bestPracticesScore)} ${scoreColor(th.bestPracticesScore)}`}>
+                      {th.bestPracticesScore}/100
+                    </span>
+                  </div>
+                  <p className="text-neutral-400 text-xs sm:text-sm mb-5">
+                    Generelle webstandarder og bedste praksis for moderne websites.
+                  </p>
+                  <div className="space-y-2">
+                    {th.bestPracticeIssues.map((issue, i) => (
+                      <details key={i} className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                        <summary className="flex items-center justify-between cursor-pointer list-none">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <AlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                            <span className="text-sm font-medium">{issue.title}</span>
+                          </div>
+                        </summary>
+                        <p className="text-xs text-neutral-400 mt-2 ml-5.5">{issue.description}</p>
                       </details>
                     ))}
                   </div>
