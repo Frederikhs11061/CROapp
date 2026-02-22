@@ -166,7 +166,7 @@ export async function scrapeWebsite(
   viewport: "desktop" | "mobile" = "desktop"
 ): Promise<ScrapedData> {
   const browser = await getBrowser();
-  let page;
+  let page: Awaited<ReturnType<typeof browser.newPage>>;
   try {
     page = await browser.newPage();
   } catch (err) {
@@ -199,11 +199,16 @@ export async function scrapeWebsite(
   }
   const loadTime = Date.now() - startTime;
 
-  // Wait for any client-side redirects to settle
-  try {
-    await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 5000 }).catch(() => {});
-  } catch { /* no pending navigation, that's fine */ }
-  await new Promise((r) => setTimeout(r, 2000));
+  // Wait for client-side redirects to settle by polling URL stability
+  let lastUrl = page.url();
+  for (let i = 0; i < 5; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const currentUrl = page.url();
+    if (currentUrl === lastUrl) break;
+    console.log(`[Scraper] URL changed: ${lastUrl} -> ${currentUrl}, waiting...`);
+    lastUrl = currentUrl;
+  }
+  await new Promise((r) => setTimeout(r, 1500));
 
   let screenshot = "";
   try {
@@ -216,21 +221,31 @@ export async function scrapeWebsite(
     console.error("[Scraper] Screenshot failed:", err instanceof Error ? err.message : err);
   }
 
-  // Wrapper that retries on detached frame (site did a client-side redirect)
+  // Wrapper that retries on detached frame — re-navigates if frame is gone
   async function safeEvaluate<T>(fn: () => Promise<T>): Promise<T> {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         return await fn();
       } catch (err) {
-        if (attempt < 2 && err instanceof Error && (err.message.includes("detached") || err.message.includes("Execution context was destroyed"))) {
-          console.error(`[Scraper] Frame detached (attempt ${attempt + 1}/3), waiting for page to settle...`);
-          await new Promise((r) => setTimeout(r, 3000));
+        const msg = err instanceof Error ? err.message : String(err);
+        if (attempt < 2 && (msg.includes("detached") || msg.includes("Execution context") || msg.includes("not attached"))) {
+          console.error(`[Scraper] Frame issue (attempt ${attempt + 1}/3): ${msg.slice(0, 80)}`);
+          // Re-navigate to the current URL to get a fresh frame
+          try {
+            const currentUrl = page.url();
+            console.log(`[Scraper] Re-navigating to ${currentUrl}...`);
+            await page.goto(currentUrl, { waitUntil: "domcontentloaded", timeout: 20000 });
+            await new Promise((r) => setTimeout(r, 2000));
+          } catch (navErr) {
+            console.error("[Scraper] Re-navigation failed:", navErr instanceof Error ? navErr.message : navErr);
+            await new Promise((r) => setTimeout(r, 3000));
+          }
           continue;
         }
         throw err;
       }
     }
-    throw new Error("Frame detached after 3 attempts");
+    throw new Error("Page frame unavailable after 3 attempts — the site may be redirecting continuously.");
   }
 
   const pageData = await safeEvaluate(() => page.evaluate(() => {
