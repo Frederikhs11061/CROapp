@@ -456,8 +456,20 @@ export async function scrapeWebsite(
 
 // ─── PageSpeed Insights (real Lighthouse data) ──────────────────
 
+export type PageSpeedAuditItem = {
+  id: string;
+  title: string;
+  description: string;
+  score: number | null;
+  displayValue?: string;
+  numericValue?: number;
+};
+
 export type PageSpeedData = {
   performanceScore: number;
+  accessibilityScore: number;
+  bestPracticesScore: number;
+  seoScore: number;
   fcp: number;
   lcp: number;
   cls: number;
@@ -467,6 +479,13 @@ export type PageSpeedData = {
   totalRequestCount: number;
   totalByteWeight: number;
   strategy: string;
+  isHttps: boolean;
+  hasViewportMeta: boolean;
+  hasCharset: boolean;
+  hasDoctype: boolean;
+  opportunities: PageSpeedAuditItem[];
+  diagnostics: PageSpeedAuditItem[];
+  passedAudits: PageSpeedAuditItem[];
 };
 
 export async function fetchPageSpeed(
@@ -474,8 +493,11 @@ export async function fetchPageSpeed(
   strategy: "mobile" | "desktop" = "mobile"
 ): Promise<PageSpeedData | null> {
   try {
-    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=${strategy}&category=performance`;
-    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) });
+    const cats = ["performance", "accessibility", "best-practices", "seo"]
+      .map((c) => `category=${c}`)
+      .join("&");
+    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=${strategy}&${cats}`;
+    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(45000) });
     if (!res.ok) return null;
     const data = await res.json();
 
@@ -483,8 +505,44 @@ export async function fetchPageSpeed(
     if (!lhr) return null;
 
     const audits = lhr.audits || {};
+    const catScores = lhr.categories || {};
+
+    const toScore = (cat: string) =>
+      Math.round((catScores[cat]?.score ?? 0) * 100);
+
+    const mapAudit = (a: Record<string, unknown>): PageSpeedAuditItem => ({
+      id: a.id as string,
+      title: a.title as string,
+      description: ((a.description as string) || "").replace(/\[.*?\]\(.*?\)/g, "").trim(),
+      score: typeof a.score === "number" ? a.score : null,
+      displayValue: a.displayValue as string | undefined,
+      numericValue: a.numericValue as number | undefined,
+    });
+
+    const opportunities: PageSpeedAuditItem[] = [];
+    const diagnostics: PageSpeedAuditItem[] = [];
+    const passedAudits: PageSpeedAuditItem[] = [];
+
+    const perfRefs = catScores.performance?.auditRefs || [];
+    for (const ref of perfRefs) {
+      const audit = audits[(ref as { id: string }).id];
+      if (!audit) continue;
+      const s = audit.score;
+      const group = (ref as { group?: string }).group;
+      if (group === "load-opportunities" && s !== null && s < 1) {
+        opportunities.push(mapAudit(audit));
+      } else if (group === "diagnostics" && s !== null && s < 1) {
+        diagnostics.push(mapAudit(audit));
+      } else if (s === 1 && (group === "load-opportunities" || group === "diagnostics")) {
+        passedAudits.push(mapAudit(audit));
+      }
+    }
+
     return {
-      performanceScore: Math.round((lhr.categories?.performance?.score ?? 0) * 100),
+      performanceScore: toScore("performance"),
+      accessibilityScore: toScore("accessibility"),
+      bestPracticesScore: toScore("best-practices"),
+      seoScore: toScore("seo"),
       fcp: audits["first-contentful-paint"]?.numericValue ?? 0,
       lcp: audits["largest-contentful-paint"]?.numericValue ?? 0,
       cls: audits["cumulative-layout-shift"]?.numericValue ?? 0,
@@ -494,6 +552,13 @@ export async function fetchPageSpeed(
       totalRequestCount: audits["network-requests"]?.details?.items?.length ?? 0,
       totalByteWeight: audits["total-byte-weight"]?.numericValue ?? 0,
       strategy,
+      isHttps: audits["is-on-https"]?.score === 1,
+      hasViewportMeta: audits["viewport"]?.score === 1,
+      hasCharset: audits["charset"]?.score === 1,
+      hasDoctype: audits["doctype"]?.score === 1,
+      opportunities,
+      diagnostics,
+      passedAudits,
     };
   } catch {
     return null;

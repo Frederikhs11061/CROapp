@@ -59,6 +59,30 @@ export type BenchmarkData = {
   industryContext: string;
 };
 
+export type TechnicalHealthCheck = {
+  label: string;
+  status: "pass" | "fail" | "warning";
+  value: string;
+  detail?: string;
+};
+
+export type TechnicalHealth = {
+  performanceScore: number;
+  accessibilityScore: number;
+  bestPracticesScore: number;
+  seoScore: number;
+  coreWebVitals: {
+    metric: string;
+    value: string;
+    rating: "good" | "needs-improvement" | "poor";
+    threshold: string;
+  }[];
+  checks: TechnicalHealthCheck[];
+  opportunities: { title: string; displayValue?: string; description: string }[];
+  diagnostics: { title: string; displayValue?: string; description: string }[];
+  passedCount: number;
+};
+
 export type AnalysisResult = {
   overallScore: number;
   pageType: string;
@@ -68,4 +92,5 @@ export type AnalysisResult = {
   prioritizedActions: string[];
   abTestIdeas: ABTestIdea[];
   benchmark: BenchmarkData;
+  technicalHealth: TechnicalHealth | null;
 };

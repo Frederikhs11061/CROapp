@@ -17,6 +17,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
+  Shield,
+  Gauge,
+  Info,
 } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import ScoreRing from "@/components/ScoreRing";
@@ -45,7 +48,7 @@ export default function ResultsClient() {
   const router = useRouter();
   const [data, setData] = useState<AnalysisData | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "overview" | "category" | "actions" | "ab-tests" | "benchmark"
+    "overview" | "category" | "actions" | "ab-tests" | "benchmark" | "technical"
   >("overview");
   const [categoryIndex, setCategoryIndex] = useState(0);
 
@@ -210,6 +213,7 @@ export default function ResultsClient() {
         <nav aria-label="Rapport-sektioner" className="flex gap-1.5 mb-8 overflow-x-auto pb-2 p-1.5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
           {([
             { key: "overview" as const, icon: TrendingUp, label: "Overblik" },
+            { key: "technical" as const, icon: Gauge, label: "Hastighed & Sikkerhed" },
             { key: "actions" as const, icon: Zap, label: "Prioriterede handlinger" },
             { key: "ab-tests" as const, icon: FlaskConical, label: "A/B Test-idéer" },
             { key: "benchmark" as const, icon: BarChart3, label: "Competitor Benchmark" },
@@ -329,6 +333,206 @@ export default function ResultsClient() {
             )}
           </div>
         )}
+
+        {/* Technical Health (Hastighed & Sikkerhed) */}
+        {activeTab === "technical" && (() => {
+          const th = analysis.technicalHealth;
+          if (!th) return (
+            <div className="glass-card rounded-2xl p-8 text-center">
+              <Gauge className="w-8 h-8 text-neutral-500 mx-auto mb-3" />
+              <p className="text-neutral-400">Teknisk data var ikke tilgængelig for denne analyse. Prøv igen.</p>
+            </div>
+          );
+
+          const ratingColor = (r: string) =>
+            r === "good" ? "text-green-400" : r === "needs-improvement" ? "text-yellow-400" : "text-red-400";
+          const ratingBg = (r: string) =>
+            r === "good" ? "bg-green-500/10 border-green-500/20" : r === "needs-improvement" ? "bg-yellow-500/10 border-yellow-500/20" : "bg-red-500/10 border-red-500/20";
+          const ratingLabel = (r: string) =>
+            r === "good" ? "God" : r === "needs-improvement" ? "Kan forbedres" : "Dårlig";
+
+          const scoreColor = (s: number) =>
+            s >= 90 ? "text-green-400" : s >= 50 ? "text-yellow-400" : "text-red-400";
+          const scoreBg = (s: number) =>
+            s >= 90 ? "bg-green-500/10 border-green-500/20" : s >= 50 ? "bg-yellow-500/10 border-yellow-500/20" : "bg-red-500/10 border-red-500/20";
+
+          return (
+            <div className="space-y-6">
+              {/* Lighthouse scores overview */}
+              <section className="glass-card rounded-2xl p-6 sm:p-8">
+                <div className="flex items-center gap-3 mb-1">
+                  <Gauge className="w-5 h-5 text-orange-400" />
+                  <h2 className="text-lg sm:text-xl font-bold">Google Lighthouse Scores</h2>
+                </div>
+                <p className="text-neutral-400 text-xs sm:text-sm mb-6">
+                  Realtidsdata fra Google PageSpeed Insights ({th.performanceScore >= 0 ? "desktop" : "N/A"}-strategi).
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                  {[
+                    { label: "Performance", score: th.performanceScore },
+                    { label: "Tilgængelighed", score: th.accessibilityScore },
+                    { label: "Best Practices", score: th.bestPracticesScore },
+                    { label: "SEO", score: th.seoScore },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className={`p-4 sm:p-5 rounded-xl border text-center ${scoreBg(item.score)}`}
+                    >
+                      <div className={`text-2xl sm:text-3xl font-bold ${scoreColor(item.score)}`}>
+                        {item.score}
+                      </div>
+                      <div className="text-xs text-neutral-400 mt-1">{item.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Core Web Vitals */}
+              <section className="glass-card rounded-2xl p-6 sm:p-8">
+                <div className="flex items-center gap-3 mb-1">
+                  <Clock className="w-5 h-5 text-orange-400" />
+                  <h2 className="text-lg sm:text-xl font-bold">Core Web Vitals</h2>
+                </div>
+                <p className="text-neutral-400 text-xs sm:text-sm mb-6">
+                  Googles vigtigste hastigheds- og brugeroplevelsesmetrikker.
+                </p>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {th.coreWebVitals.map((v) => (
+                    <div
+                      key={v.metric}
+                      className={`p-4 rounded-xl border ${ratingBg(v.rating)}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider">{v.metric}</span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                          v.rating === "good" ? "bg-green-500/20 text-green-400" :
+                          v.rating === "needs-improvement" ? "bg-yellow-500/20 text-yellow-400" :
+                          "bg-red-500/20 text-red-400"
+                        }`}>{ratingLabel(v.rating)}</span>
+                      </div>
+                      <div className={`text-xl font-bold ${ratingColor(v.rating)}`}>{v.value}</div>
+                      <div className="text-[11px] text-neutral-500 mt-1">Anbefalet: {v.threshold}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Security & Technical Checks */}
+              <section className="glass-card rounded-2xl p-6 sm:p-8">
+                <div className="flex items-center gap-3 mb-1">
+                  <Shield className="w-5 h-5 text-orange-400" />
+                  <h2 className="text-lg sm:text-xl font-bold">Sikkerhed & Teknisk Sundhed</h2>
+                </div>
+                <p className="text-neutral-400 text-xs sm:text-sm mb-6">
+                  SSL, GDPR, tilgængelighed og tekniske grundkrav.
+                </p>
+                <div className="space-y-2">
+                  {th.checks.map((check) => (
+                    <div
+                      key={check.label}
+                      className="flex items-start gap-3 p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] transition-colors"
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        {check.status === "pass" ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-400" />
+                        ) : check.status === "fail" ? (
+                          <XCircle className="w-4 h-4 text-red-400" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">{check.label}</span>
+                          <span className={`text-xs font-semibold ${
+                            check.status === "pass" ? "text-green-400" :
+                            check.status === "fail" ? "text-red-400" :
+                            "text-yellow-400"
+                          }`}>{check.value}</span>
+                        </div>
+                        {check.detail && (
+                          <p className="text-xs text-neutral-500 mt-0.5">{check.detail}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Opportunities */}
+              {th.opportunities.length > 0 && (
+                <section className="glass-card rounded-2xl p-6 sm:p-8">
+                  <div className="flex items-center gap-3 mb-1">
+                    <Zap className="w-5 h-5 text-orange-400" />
+                    <h2 className="text-lg sm:text-xl font-bold">Forbedringsmuligheder</h2>
+                  </div>
+                  <p className="text-neutral-400 text-xs sm:text-sm mb-6">
+                    Konkrete tiltag der kan forbedre din loadtid — direkte fra Lighthouse.
+                  </p>
+                  <div className="space-y-2">
+                    {th.opportunities.map((opp, i) => (
+                      <details
+                        key={i}
+                        className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]"
+                      >
+                        <summary className="flex items-center justify-between cursor-pointer list-none">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <AlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                            <span className="text-sm font-medium truncate">{opp.title}</span>
+                          </div>
+                          {opp.displayValue && (
+                            <span className="text-xs text-orange-400 font-semibold shrink-0 ml-2">{opp.displayValue}</span>
+                          )}
+                        </summary>
+                        <p className="text-xs text-neutral-400 mt-2 pl-5.5">{opp.description}</p>
+                      </details>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Diagnostics */}
+              {th.diagnostics.length > 0 && (
+                <section className="glass-card rounded-2xl p-6 sm:p-8">
+                  <div className="flex items-center gap-3 mb-1">
+                    <Info className="w-5 h-5 text-orange-400" />
+                    <h2 className="text-lg sm:text-xl font-bold">Diagnostik</h2>
+                  </div>
+                  <p className="text-neutral-400 text-xs sm:text-sm mb-6">
+                    Yderligere information om sidens tekniske sundhed.
+                  </p>
+                  <div className="space-y-2">
+                    {th.diagnostics.map((diag, i) => (
+                      <details
+                        key={i}
+                        className="group p-3 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]"
+                      >
+                        <summary className="flex items-center justify-between cursor-pointer list-none">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Info className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                            <span className="text-sm font-medium truncate">{diag.title}</span>
+                          </div>
+                          {diag.displayValue && (
+                            <span className="text-xs text-neutral-400 font-semibold shrink-0 ml-2">{diag.displayValue}</span>
+                          )}
+                        </summary>
+                        <p className="text-xs text-neutral-400 mt-2 pl-5.5">{diag.description}</p>
+                      </details>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Passed summary */}
+              {th.passedCount > 0 && (
+                <div className="flex items-center gap-2 p-4 rounded-xl bg-green-500/5 border border-green-500/10">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                  <span className="text-sm text-green-300">{th.passedCount} Lighthouse-audits bestået</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Single category detail view */}
         {activeTab === "category" && (() => {

@@ -1,5 +1,5 @@
 import { ANALYSIS_CATEGORIES } from "./cro-knowledge";
-import type { AnalysisResult, Finding, Category, QuickWin, ABTestIdea, BenchmarkData, BenchmarkComparison } from "./cro-knowledge";
+import type { AnalysisResult, Finding, Category, QuickWin, ABTestIdea, BenchmarkData, BenchmarkComparison, TechnicalHealth, TechnicalHealthCheck } from "./cro-knowledge";
 import type { ScrapedData, PageSpeedData } from "./scraper";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -771,6 +771,129 @@ function generateSummary(categories: Category[], score: number, pageType: PageTy
   return s;
 }
 
+// ─── Technical Health Builder ────────────────────────────────────
+
+function fmtMs(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
+function cwvRating(metric: string, value: number): "good" | "needs-improvement" | "poor" {
+  const thresholds: Record<string, [number, number]> = {
+    LCP: [2500, 4000],
+    FCP: [1800, 3000],
+    TBT: [200, 600],
+    CLS: [0.1, 0.25],
+    SI: [3400, 5800],
+    TTFB: [800, 1800],
+  };
+  const t = thresholds[metric];
+  if (!t) return "good";
+  return value <= t[0] ? "good" : value <= t[1] ? "needs-improvement" : "poor";
+}
+
+function buildTechnicalHealth(ctx: AnalysisContext): TechnicalHealth | null {
+  const { pageSpeed, data } = ctx;
+  if (!pageSpeed) return null;
+
+  const coreWebVitals = [
+    { metric: "LCP", value: fmtMs(pageSpeed.lcp), rating: cwvRating("LCP", pageSpeed.lcp), threshold: "≤ 2.5 s" },
+    { metric: "FCP", value: fmtMs(pageSpeed.fcp), rating: cwvRating("FCP", pageSpeed.fcp), threshold: "≤ 1.8 s" },
+    { metric: "TBT", value: fmtMs(pageSpeed.tbt), rating: cwvRating("TBT", pageSpeed.tbt), threshold: "≤ 200 ms" },
+    { metric: "CLS", value: pageSpeed.cls.toFixed(3), rating: cwvRating("CLS", pageSpeed.cls), threshold: "≤ 0.1" },
+    { metric: "Speed Index", value: fmtMs(pageSpeed.si), rating: cwvRating("SI", pageSpeed.si), threshold: "≤ 3.4 s" },
+    { metric: "TTFB", value: fmtMs(pageSpeed.ttfb), rating: cwvRating("TTFB", pageSpeed.ttfb), threshold: "≤ 800 ms" },
+  ];
+
+  const checks: TechnicalHealthCheck[] = [];
+
+  checks.push({
+    label: "HTTPS / SSL",
+    status: pageSpeed.isHttps ? "pass" : "fail",
+    value: pageSpeed.isHttps ? "Aktiveret" : "Ikke aktiveret",
+    detail: pageSpeed.isHttps ? "Siden kører over en sikker HTTPS-forbindelse." : "Siden kører IKKE over HTTPS. Det påvirker sikkerhed, SEO og brugertillid.",
+  });
+
+  checks.push({
+    label: "Viewport meta-tag",
+    status: pageSpeed.hasViewportMeta ? "pass" : "fail",
+    value: pageSpeed.hasViewportMeta ? "Korrekt" : "Mangler",
+    detail: pageSpeed.hasViewportMeta ? "Siden har korrekt viewport meta-tag til mobilvisning." : "Siden mangler viewport meta-tag, hvilket giver dårlig mobiloplevelse.",
+  });
+
+  checks.push({
+    label: "Doctype",
+    status: pageSpeed.hasDoctype ? "pass" : "fail",
+    value: pageSpeed.hasDoctype ? "Korrekt" : "Mangler",
+  });
+
+  checks.push({
+    label: "Charset-deklaration",
+    status: pageSpeed.hasCharset ? "pass" : "fail",
+    value: pageSpeed.hasCharset ? "Korrekt" : "Mangler",
+  });
+
+  checks.push({
+    label: "Cookie-samtykke (GDPR)",
+    status: data.uxSignals.hasCookieConsent ? "pass" : "warning",
+    value: data.uxSignals.hasCookieConsent ? "Registreret" : "Ikke fundet",
+    detail: data.uxSignals.hasCookieConsent
+      ? "Siden viser en cookie-samtykke-dialog."
+      : "Vi kunne ikke finde en cookie-samtykke-dialog. Sørg for GDPR-overholdelse.",
+  });
+
+  checks.push({
+    label: "Billedalt-tekst",
+    status: data.uxSignals.hasAltOnAllImages ? "pass" : "warning",
+    value: data.uxSignals.hasAltOnAllImages ? "Alle billeder har alt-tekst" : "Mangler på nogle billeder",
+    detail: data.uxSignals.hasAltOnAllImages ? undefined : "Billeder uden alt-tekst skader tilgængelighed og SEO.",
+  });
+
+  checks.push({
+    label: "Skip-to-content link",
+    status: data.uxSignals.hasSkipToContent ? "pass" : "warning",
+    value: data.uxSignals.hasSkipToContent ? "Findes" : "Mangler",
+    detail: "Et skip-to-content link forbedrer tilgængelighed for tastaturbrugere.",
+  });
+
+  checks.push({
+    label: "ARIA-attributter",
+    status: data.uxSignals.hasAriaLabels ? "pass" : "warning",
+    value: data.uxSignals.hasAriaLabels ? "Registreret" : "Ikke fundet",
+  });
+
+  const bytesMB = (pageSpeed.totalByteWeight / (1024 * 1024)).toFixed(1);
+  checks.push({
+    label: "Total sidestørrelse",
+    status: pageSpeed.totalByteWeight < 2_000_000 ? "pass" : pageSpeed.totalByteWeight < 4_000_000 ? "warning" : "fail",
+    value: `${bytesMB} MB`,
+    detail: `${pageSpeed.totalRequestCount} requests i alt.`,
+  });
+
+  const opportunities = pageSpeed.opportunities.map((o) => ({
+    title: o.title,
+    displayValue: o.displayValue,
+    description: o.description,
+  }));
+
+  const diagnostics = pageSpeed.diagnostics.map((d) => ({
+    title: d.title,
+    displayValue: d.displayValue,
+    description: d.description,
+  }));
+
+  return {
+    performanceScore: pageSpeed.performanceScore,
+    accessibilityScore: pageSpeed.accessibilityScore,
+    bestPracticesScore: pageSpeed.bestPracticesScore,
+    seoScore: pageSpeed.seoScore,
+    coreWebVitals,
+    checks,
+    opportunities,
+    diagnostics,
+    passedCount: pageSpeed.passedAudits.length,
+  };
+}
+
 // ─── Main ───────────────────────────────────────────────────────
 
 export function analyzeWebsite(data: ScrapedData, pageSpeed: PageSpeedData | null = null): AnalysisResult {
@@ -792,6 +915,7 @@ export function analyzeWebsite(data: ScrapedData, pageSpeed: PageSpeedData | nul
   const overallScore = Math.round(categories.reduce((a, c) => a + c.score, 0) / categories.length);
   const abTestIdeas = generateABTestIdeas(ctx, categories);
   const benchmark = generateBenchmark(ctx, categories, overallScore);
+  const technicalHealth = buildTechnicalHealth(ctx);
 
   return {
     overallScore,
@@ -802,6 +926,7 @@ export function analyzeWebsite(data: ScrapedData, pageSpeed: PageSpeedData | nul
     prioritizedActions: generatePrioritizedActions(categories),
     abTestIdeas,
     benchmark,
+    technicalHealth,
   };
 }
 
