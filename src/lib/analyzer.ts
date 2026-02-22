@@ -10,6 +10,8 @@ type AnalysisContext = {
   data: ScrapedData;
   pageType: PageType;
   pageSpeed: PageSpeedData | null;
+  pageSpeedDesktop: PageSpeedData | null;
+  pageSpeedMobile: PageSpeedData | null;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -460,58 +462,82 @@ function analyzeDesignUX(ctx: AnalysisContext): Category {
 }
 
 function analyzePerformance(ctx: AnalysisContext): Category {
-  const { data, pageSpeed } = ctx;
+  const { data, pageSpeedDesktop: psD, pageSpeedMobile: psM } = ctx;
   const findings: Finding[] = [];
 
-  if (pageSpeed) {
-    // Use real Lighthouse data
-    const ps = pageSpeed;
-    if (ps.performanceScore >= 90) {
-      findings.push(f("success", `Lighthouse score: ${ps.performanceScore}/100`,
-        `Fremragende performance-score fra Google PageSpeed Insights (${ps.strategy}).`, "", "high", "Friktionslov"));
-    } else if (ps.performanceScore >= 50) {
-      findings.push(f("warning", `Lighthouse score: ${ps.performanceScore}/100`,
-        `Performance-scoren fra Google PageSpeed Insights er ${ps.performanceScore}/100 (${ps.strategy}). Under 90 er suboptimalt.`,
-        "Fokusér på at reducere LCP (største billede/tekst), minimér JavaScript-bundler og optimer billeder til WebP/AVIF.",
-        "high", "Friktionslov"));
-    } else {
-      findings.push(f("error", `Lighthouse score: ${ps.performanceScore}/100`,
-        `Kritisk lav performance-score fra Google PageSpeed Insights (${ps.strategy}). Det påvirker både SEO-ranking og konverteringsrate.`,
-        "Prioritér: 1) Optimer billeder (WebP, lazy-load) 2) Reducer render-blocking JS/CSS 3) Aktivér server-caching/CDN 4) Reducer tredjepartsscripts.",
-        "high", "Friktionslov"));
+  const hasAnyPageSpeed = psD || psM;
+
+  if (hasAnyPageSpeed) {
+    // Desktop Lighthouse
+    if (psD) {
+      const s = psD.performanceScore;
+      if (s >= 90) {
+        findings.push(f("success", `Desktop Lighthouse: ${s}/100`,
+          `Fremragende desktop performance-score fra Google PageSpeed Insights.`, "", "high", "Friktionslov"));
+      } else if (s >= 50) {
+        findings.push(f("warning", `Desktop Lighthouse: ${s}/100`,
+          `Desktop performance-score er ${s}/100. Under 90 er suboptimalt.`,
+          "Fokusér på at reducere LCP, minimér JavaScript-bundler og optimer billeder til WebP/AVIF.",
+          "high", "Friktionslov"));
+      } else {
+        findings.push(f("error", `Desktop Lighthouse: ${s}/100`,
+          `Kritisk lav desktop performance-score (${s}/100). Det påvirker både SEO-ranking og konverteringsrate.`,
+          "Prioritér: 1) Optimer billeder (WebP, lazy-load) 2) Reducer render-blocking JS/CSS 3) Aktivér server-caching/CDN.",
+          "high", "Friktionslov"));
+      }
     }
 
-    // LCP
-    if (ps.lcp > 0) {
-      const lcpSec = (ps.lcp / 1000).toFixed(1);
-      if (ps.lcp <= 2500) {
-        findings.push(f("success", `LCP: ${lcpSec}s (god)`,
+    // Mobile Lighthouse
+    if (psM) {
+      const s = psM.performanceScore;
+      if (s >= 90) {
+        findings.push(f("success", `Mobil Lighthouse: ${s}/100`,
+          `Fremragende mobil performance-score fra Google PageSpeed Insights.`, "", "high", "Friktionslov"));
+      } else if (s >= 50) {
+        findings.push(f("warning", `Mobil Lighthouse: ${s}/100`,
+          `Mobil performance-score er ${s}/100. Over 60% af trafik er mobil – under 90 koster konverteringer.`,
+          "Mobil kræver ekstra optimering: reducer JavaScript, brug responsive billeder og lazy-load aggressivt.",
+          "high", "Friktionslov"));
+      } else {
+        findings.push(f("error", `Mobil Lighthouse: ${s}/100`,
+          `Kritisk lav mobil performance-score (${s}/100). Google bruger mobil-score til ranking (Mobile-First Indexing).`,
+          "Akut: 1) Reducer Total Blocking Time med code-splitting 2) Optimer billeder 3) Fjern unødvendige tredjepartsscripts 4) Overvej CDN.",
+          "high", "Friktionslov"));
+      }
+    }
+
+    // LCP from best available source (prefer desktop, show both if available)
+    const psMain = psD || psM;
+    if (psMain && psMain.lcp > 0) {
+      const lcpSec = (psMain.lcp / 1000).toFixed(1);
+      const device = psMain === psD ? "desktop" : "mobil";
+      if (psMain.lcp <= 2500) {
+        findings.push(f("success", `LCP: ${lcpSec}s (${device})`,
           `Largest Contentful Paint er ${lcpSec}s – under Googles anbefaling på 2.5s.`, "", "high", "Friktionslov"));
-      } else if (ps.lcp <= 4000) {
-        findings.push(f("warning", `LCP: ${lcpSec}s (behøver forbedring)`,
+      } else if (psMain.lcp <= 4000) {
+        findings.push(f("warning", `LCP: ${lcpSec}s (${device})`,
           `Largest Contentful Paint er ${lcpSec}s. Google anbefaler under 2.5s.`,
           "Optimer det største synlige element (typisk hero-billede): brug WebP/AVIF, preload det, og reducer dets filstørrelse.",
           "high", "Friktionslov"));
       } else {
-        findings.push(f("error", `LCP: ${lcpSec}s (for langsomt)`,
-          `Largest Contentful Paint er ${lcpSec}s – langt over Googles 2.5s anbefaling. Det koster konverteringer og SEO-ranking.`,
-          "Akut: preload hero-billede, konverter til WebP, reducer JavaScript, overvej CDN. Hvert sekund over 3s mister du ~7% konverteringer.",
+        findings.push(f("error", `LCP: ${lcpSec}s (${device})`,
+          `Largest Contentful Paint er ${lcpSec}s – langt over Googles 2.5s anbefaling. Hvert sekund over 3s mister du ~7% konverteringer.`,
+          "Akut: preload hero-billede, konverter til WebP, reducer JavaScript, overvej CDN.",
           "high", "Friktionslov"));
       }
     }
 
     // CLS
-    if (ps.cls > 0.25) {
-      findings.push(f("warning", `CLS: ${ps.cls.toFixed(3)} (layout-ustabilitet)`,
+    if (psMain && psMain.cls > 0.25) {
+      findings.push(f("warning", `CLS: ${psMain.cls.toFixed(3)} (layout-ustabilitet)`,
         "Elementer flytter sig mens siden loader. Det skaber dårlig brugeroplevelse og lavere SEO-score.",
         "Sæt faste width/height på billeder og embeds. Undgå at indsætte indhold dynamisk over eksisterende content.",
         "medium", "Friktionslov"));
-    } else if (ps.cls >= 0) {
-      findings.push(f("success", `CLS: ${ps.cls.toFixed(3)} (stabilt)`,
+    } else if (psMain && psMain.cls >= 0) {
+      findings.push(f("success", `CLS: ${psMain.cls.toFixed(3)} (stabilt)`,
         "Layout er stabilt mens siden loader – god brugeroplevelse.", "", "medium", "Friktionslov"));
     }
   } else {
-    // Fallback: use our own measurements
     const lt = data.performance.loadTime;
     if (lt < 2000) {
       findings.push(f("success", `Loadtid: ${(lt / 1000).toFixed(1)}s`,
@@ -993,7 +1019,7 @@ export function analyzeWebsite(
   securityHeaders: SecurityHeadersData | null = null,
 ): AnalysisResult {
   const pageType = detectPageType(data);
-  const ctx: AnalysisContext = { data, pageType, pageSpeed: pageSpeedDesktop };
+  const ctx: AnalysisContext = { data, pageType, pageSpeed: pageSpeedDesktop || pageSpeedMobile, pageSpeedDesktop, pageSpeedMobile };
 
   const categories: Category[] = [
     analyzeAboveTheFold(ctx),
