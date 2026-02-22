@@ -216,22 +216,24 @@ export async function scrapeWebsite(
     console.error("[Scraper] Screenshot failed:", err instanceof Error ? err.message : err);
   }
 
-  // Verify frame is still attached before evaluating
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      await page.evaluate(() => document.readyState);
-      break;
-    } catch (err) {
-      if (attempt < 2 && err instanceof Error && err.message.includes("detached")) {
-        console.error(`[Scraper] Frame detached (attempt ${attempt + 1}), waiting...`);
-        await new Promise((r) => setTimeout(r, 3000));
-        continue;
+  // Wrapper that retries on detached frame (site did a client-side redirect)
+  async function safeEvaluate<T>(fn: () => Promise<T>): Promise<T> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        if (attempt < 2 && err instanceof Error && (err.message.includes("detached") || err.message.includes("Execution context was destroyed"))) {
+          console.error(`[Scraper] Frame detached (attempt ${attempt + 1}/3), waiting for page to settle...`);
+          await new Promise((r) => setTimeout(r, 3000));
+          continue;
+        }
+        throw err;
       }
-      throw err;
     }
+    throw new Error("Frame detached after 3 attempts");
   }
 
-  const pageData = await page.evaluate(() => {
+  const pageData = await safeEvaluate(() => page.evaluate(() => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const getTextContent = (el: Element | null) => el?.textContent?.trim() ?? "";
@@ -586,17 +588,17 @@ export async function scrapeWebsite(
         hasAggressivePopups,
       },
     };
-  });
+  }));
 
   let performanceTiming = { domContentLoaded: 0, resourceCount: 0 };
   try {
-    performanceTiming = await page.evaluate(() => {
+    performanceTiming = await safeEvaluate(() => page.evaluate(() => {
       const perf = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming;
       return {
         domContentLoaded: Math.round(perf?.domContentLoadedEventEnd ?? 0),
-        resourceCount: performance.getEntriesByType("resource").length,
-      };
-    });
+      resourceCount: performance.getEntriesByType("resource").length,
+    };
+  }));
   } catch { /* ignore */ }
 
   return {
