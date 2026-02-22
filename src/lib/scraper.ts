@@ -353,8 +353,37 @@ export async function scrapeWebsite(
     });
 
     // ─── Structural info (much broader detection) ───
-    const nav = document.querySelector("nav, [role='navigation'], header");
-    const navItems = nav ? nav.querySelectorAll("a").length : 0;
+    const nav = document.querySelector("nav, [role='navigation']") || document.querySelector("header nav, header [role='navigation']");
+    let navItems = 0;
+    if (nav) {
+      const topList = nav.querySelector("ul, ol");
+      if (topList) {
+        // Count only direct <li> children of the first list (top-level items)
+        navItems = topList.querySelectorAll(":scope > li").length;
+      } else {
+        // No list structure: count direct <a> children of nav (skip nested links)
+        const directLinks = nav.querySelectorAll(":scope > a, :scope > div > a, :scope > span > a");
+        navItems = directLinks.length || nav.querySelectorAll("a").length;
+      }
+      // Exclude common utility links (cart, search, account, logo)
+      const utilityPatterns = /cart|kurv|basket|søg|search|account|konto|login|log.?ind|profil|favorit|wish/i;
+      if (topList) {
+        let utilityCount = 0;
+        topList.querySelectorAll(":scope > li").forEach((li) => {
+          const text = (li.textContent || "").trim();
+          const href = li.querySelector("a")?.getAttribute("href") || "";
+          if (utilityPatterns.test(text) || utilityPatterns.test(href) || text.length === 0) utilityCount++;
+        });
+        navItems = Math.max(0, navItems - utilityCount);
+      }
+    } else {
+      // Fallback: check header for nav-like structure
+      const header = document.querySelector("header");
+      if (header) {
+        const headerList = header.querySelector("ul");
+        navItems = headerList ? headerList.querySelectorAll(":scope > li").length : 0;
+      }
+    }
     const footer = document.querySelector("footer, [class*='footer']");
 
     const heroSelectors = '[class*="hero"], [class*="banner"], [class*="jumbotron"], [class*="splash"], [class*="intro"], [class*="masthead"], [class*="slider"], [class*="carousel"], [class*="slideshow"]';
